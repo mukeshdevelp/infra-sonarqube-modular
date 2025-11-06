@@ -1,0 +1,5 @@
+*.lock
+.terraform/
+.terraform
+.tfstate
+.json
