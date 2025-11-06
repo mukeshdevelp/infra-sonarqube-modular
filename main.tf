@@ -30,12 +30,12 @@ module "security_groups" {
   allowed_ip = var.whitelisted_ip
   subnet_id  = [module.subnets.public_subnets, module.subnets.private_subnets]
   app_port   = var.app_port
-  
+
 }
 # nacl module resources
 module "nacl" {
-  source             = "./modules/nacls"
-  vpc_id             = module.vpc.vpc_id
+  source = "./modules/nacls"
+  vpc_id = module.vpc.vpc_id
   # might be mistake here
   public_subnets     = [module.subnets.private_subnets]
   private_subnets    = [module.subnets.private_subnets]
@@ -47,9 +47,9 @@ module "routes" {
   source          = "./modules/routes"
   public_subnets  = module.subnets.public_subnets
   private_subnets = module.subnets.private_subnets
-  
-  vpc_id = module.vpc.vpc_id
-  igw_id = module.vpc.igw_id
+
+  vpc_id         = module.vpc.vpc_id
+  igw_id         = module.vpc.igw_id
   nat_gateway_id = module.vpc.nat_gateway_id
 }
 
@@ -62,7 +62,7 @@ module "sonarqube_alb" {
   security_groups = [module.security_groups.private_sg_id]
   subnets = [
     module.subnets.private_subnets
-    
+
   ]
   vpc_id            = module.vpc.vpc_id
   target_group_name = var.target_group_name

@@ -28,3 +28,8 @@ output "alb_id" {
   description = "The ID of the ALB"
   value       = aws_lb.this.id
 }
+
+output "target_group_name" {
+  description = "target group name"
+  value = aws_lb_target_group.this.name
+}

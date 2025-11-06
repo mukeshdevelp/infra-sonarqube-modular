@@ -20,50 +20,50 @@ variable "cidr_block" {
 # subnet module
 variable "availability_zones" {
   description = "subnets availibility zones for public subnets"
-  type = list(string)
-  default = ["us-east-1a", "us-east-1b"]
-  
+  type        = list(string)
+  default     = ["us-east-1a", "us-east-1b"]
+
 }
 # subents modules
 variable "public_subnets_cidrs" {
   description = "subnets availibility zones for public subnets"
-  type = list(string)
-  default = ["10.0.1.0/24", "10.0.2.0/24"]
-  
+  type        = list(string)
+  default     = ["10.0.1.0/24", "10.0.2.0/24"]
+
 }
 # subents modules
 variable "private_subnets_cidrs" {
   description = "cidrs of private subents"
-  type = list(string)
-  default = ["10.0.3.0/24", "10.0.4.0/24"]
+  type        = list(string)
+  default     = ["10.0.3.0/24", "10.0.4.0/24"]
 }
 
 # security_groups
 variable "whitelisted_ip" {
   description = "allowed ips for security groups"
-  type = list(string)
-  default = [ "103.87.45.36/32" ]
-  
+  type        = list(string)
+  default     = ["103.87.45.36/32"]
+
 }
 # used as variable in root.tf and going in alb modules' variable
 variable "alb_name" {
   description = "load balancer name applied on the sonarqube subnets"
-  type = string
-  default = "sonarqube-alb"
+  type        = string
+  default     = "sonarqube-alb"
 }
 # used in root.tf
 # target group name
 variable "target_group_name" {
   description = "target groups for alb"
-  type = string
-  default = "sonarqube-tg"
+  type        = string
+  default     = "sonarqube-tg"
 }
 
 # Health check path for ALB
 variable "alb_health_check_path" {
   description = "health check path of sonarqube app"
-  type = string
-  default = "/"
+  type        = string
+  default     = "/"
 }
 variable "target_group_port" {
   description = "Port of the ALB target group"
@@ -85,7 +85,7 @@ variable "listener_port" {
 variable "key_name" {
   description = "Name of the EC2 key pair."
   type        = string
-  default = "sonarqube-key"
+  default     = "sonarqube-key"
 }
 
 variable "private_key_file_path" {
@@ -103,8 +103,8 @@ variable "ami_name" {
 variable "launch_template_name" {
   description = "The name of the EC2 launch template."
   type        = string
-  default = "sonarqube-lt"
-  
+  default     = "sonarqube-lt"
+
 }
 
 variable "instance_type" {
@@ -128,19 +128,19 @@ variable "instance_name" {
 variable "asg_name" {
   description = "The name of the Auto Scaling Group"
   type        = string
-  default = "sonarqube-asg"
+  default     = "sonarqube-asg"
 }
 
 variable "desired_capacity" {
   description = "The desired number of instances in the Auto Scaling Group"
   type        = number
-  default = 2
+  default     = 2
 }
 
 variable "max_size" {
   description = "The maximum size of the Auto Scaling Group"
   type        = number
-  default = 3
+  default     = 3
 }
 
 
@@ -168,8 +168,14 @@ variable "lb_listener_arn" {
   description = "The ARN of the ALB listener"
   type        = string
 }
+variable "app_port" {
+  description = "app port for sonarqube"
+  type = number
+  default = 9000
+}
 
 # will see after--------------
+/*
 # root/variables.tf
 # VPC ID for the SonarQube environment
 variable "vpc_id" {
@@ -178,11 +184,7 @@ variable "vpc_id" {
   
   
 }
-variable "app_port" {
-  description = "app port for sonarqube"
-  type = number
-  default = 9000
-}
+
 
 
 variable "public_subnets" {
@@ -275,3 +277,4 @@ variable "sonarqube_container_name" {
   type        = string
   default     = "sonarqube"
 }
+*/
