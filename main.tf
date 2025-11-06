@@ -88,9 +88,9 @@ module "sonarqube_alb" {
 module "sonarqube_asg" {
   source             = "./modules/asg"
   asg_name           = var.asg_name
-  desired_capacity   = var.desired_capacity
-  max_size           = var.max_size
-  min_size           = var.min_size
+  desired_capacity    = 2        # must be >=1
+  min_size            = 1
+  max_size            = 3
   private_subnets    = module.subnets.private_subnets
   target_group_arn   = module.sonarqube_alb.target_group_arn
   launch_template_id = module.sonarqube_compute.launch_template_id
