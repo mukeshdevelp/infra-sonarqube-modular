@@ -33,6 +33,7 @@ data "aws_ami" "ubuntu" {
   }
 }
 
+
 # Launch Template (SonarQube EC2 Instance)
 resource "aws_launch_template" "sonarqube_lt" {
   name                   = var.launch_template_name

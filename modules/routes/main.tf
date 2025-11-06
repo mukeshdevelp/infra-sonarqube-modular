@@ -31,20 +31,20 @@ resource "aws_route" "nat_gateway_access" {
 
 resource "aws_route_table_association" "public_a" {
   subnet_id      = var.public_subnets[0]
-  route_table_id = aws_route_table.public
+  route_table_id = aws_route_table.public.id
 }
 
 resource "aws_route_table_association" "public_b" {
   subnet_id      = var.public_subnets[1]
-  route_table_id = aws_route_table.public
+  route_table_id = aws_route_table.public.id                    
 }
 
 resource "aws_route_table_association" "private_a" {
   subnet_id      = var.private_subnets[0]
-  route_table_id = aws_route_table.private
+  route_table_id = aws_route_table.private.id
 }
 
 resource "aws_route_table_association" "private_b" {
   subnet_id      = var.private_subnets[1]
-  route_table_id = aws_route_table.private
+  route_table_id = aws_route_table.private.id
 }

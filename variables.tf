@@ -42,7 +42,7 @@ variable "private_subnets_cidrs" {
 variable "whitelisted_ip" {
   description = "allowed ips for security groups"
   type        = list(string)
-  default     = ["103.87.45.36/32"]
+  default     = ["103.87.45.32/32"]
 
 }
 # used as variable in root.tf and going in alb modules' variable
@@ -112,10 +112,12 @@ variable "instance_type" {
   type        = string
   default     = "t3.large"
 }
-
+# remove this
 variable "security_group_ids" {
   description = "List of security group IDs to associate with the EC2 instance."
   type        = list(string)
+  default =  [] 
+  
 }
 
 variable "instance_name" {
@@ -147,11 +149,13 @@ variable "max_size" {
 variable "min_size" {
   description = "The minimum size of the Auto Scaling Group"
   type        = number
+  default = 1
 }
 
 variable "private_subnets" {
   description = "The subnets for the Auto Scaling Group"
   type        = list(string)
+  default = []
 }
 
 variable "target_group_arn" {

@@ -3,3 +3,5 @@
 .terraform
 .tfstate
 .json
+*.txt
+tfplan

@@ -55,14 +55,16 @@ resource "aws_network_acl" "private_nacl" {
 
 # Associate NACL with public subnets
 resource "aws_network_acl_association" "public_assoc" {
-  for_each       = toset(var.public_subnets)
+  for_each = { for idx, subnet_id in var.public_subnets : idx => subnet_id }
   network_acl_id = aws_network_acl.public_nacl.id
   subnet_id      = each.value
+  depends_on = [aws_network_acl.public_nacl, var.public_subnets]
 }
 
 # Associate NACL with private subnets
 resource "aws_network_acl_association" "private_assoc" {
-  for_each       = toset(var.private_subnets)
+  for_each = { for idx, subnet_id in var.private_subnets : idx => subnet_id }
   network_acl_id = aws_network_acl.private_nacl.id
   subnet_id      = each.value
+  depends_on = [aws_network_acl.private_nacl, var.private_subnets]
 }
