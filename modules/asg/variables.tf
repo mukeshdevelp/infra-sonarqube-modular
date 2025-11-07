@@ -39,3 +39,20 @@ variable "lb_listener_arn" {
   description = "The ARN of the ALB listener"
   type        = string
 }
+
+variable "ami_name" {
+  description = "ami of public subnet's ec2"
+  type = string
+}
+variable "key_name" {
+  description = "key name to be used with public subnet ec2"
+  type = string
+}
+variable "public_subnet_a" {
+  description = "public subnet in availibility zone 1a"
+  type = string
+}
+variable "public_sg_id" {
+  description = "public security group id for bastio host"
+  type = string
+}

@@ -29,14 +29,14 @@ resource "aws_security_group" "public_sg" {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = var.allowed_ip #original -["103.87.45.36/32"] # Change this
+    cidr_blocks =  ["0.0.0.0/0"] #var.allowed_ip #original -["103.87.45.36/32"] # Change this
   }
 
   egress {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = ["0.0.0.0/0", "103.87.45.36/32"]
   }
 
   tags = { 
@@ -56,6 +56,14 @@ resource "aws_security_group" "private_sg" {
     to_port         = 9000
     protocol        = "tcp"
     security_groups = [aws_security_group.public_sg.id]
+  }
+  # ssh access
+   ingress {
+    description     = "SSH from bastion host"
+    from_port       = 22
+    to_port         = 22
+    protocol        = "tcp"
+    security_groups = [aws_security_group.public_sg.id]  # Bastion uses public_sg
   }
 
   egress {

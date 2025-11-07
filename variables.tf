@@ -42,7 +42,7 @@ variable "private_subnets_cidrs" {
 variable "whitelisted_ip" {
   description = "allowed ips for security groups"
   type        = list(string)
-  default     = ["103.87.45.32/32"]
+  default     = ["0.0.0.0/32"]
 
 }
 # used as variable in root.tf and going in alb modules' variable
@@ -98,6 +98,10 @@ variable "ami_name" {
   description = "The name pattern for the Ubuntu AMI."
   type        = string
   default     = "ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"
+}
+variable "ubuntu_ami_id" {
+  description = "fetching dynamically"
+  type = string
 }
 
 variable "launch_template_name" {

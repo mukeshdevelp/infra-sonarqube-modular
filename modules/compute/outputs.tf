@@ -19,3 +19,8 @@ output "launch_template_name" {
   description = "Name of the launch template."
   value       = aws_launch_template.sonarqube_lt.name
 }
+
+output "ubuntu_ami_id" {
+  description = "ubuntu id based on data block"
+  value = data.aws_ami.ubuntu.id
+}
