@@ -9,7 +9,19 @@ data "aws_ami" "ubuntu" {
   }
 }
 
+resource "aws_instance" "public_ec2" {
+  ami                    = data.aws_ami.ubuntu.id
+  instance_type          = "t2.micro"
+  # change here
+  subnet_id              = var.public_subnet_a_id
+  vpc_security_group_ids = [var.public_security_group]
+  key_name               = var.key_name
+  associate_public_ip_address = true
 
+  tags = {
+    Name = "public-ec2-instance"
+  }
+}
 
 
 resource "aws_launch_template" "lt" {

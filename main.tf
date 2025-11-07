@@ -33,6 +33,8 @@ module "compute" {
   private_subnets  = module.vpc.private_subnets
   private_sg_id    = module.security.private_sg_id
   target_group_arn = module.alb.target_group_arn
+  public_subnet_a_id = module.vpc.public_subnets[0]
+  public_security_group =  module.security.public_sg_id
   key_name         = module.keypair.key_name
 }
 

@@ -8,5 +8,11 @@ variable "target_group_arn" {
 
 }
 variable "key_name" {
-    
+
+}
+variable public_subnet_a_id{
+
+}
+variable public_security_group{
+
 }

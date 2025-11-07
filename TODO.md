@@ -155,3 +155,4 @@ problem 3 - ec2 public fix
 problem 4 - see the ips of all ec2's
 problem 5 - it should not ask for image id etc from me
 
+[User Browser] → [ALB:80] → [Target Group:9000] → [SonarQube EC2 in ASG]
