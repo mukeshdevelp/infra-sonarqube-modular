@@ -30,7 +30,7 @@ module "security_groups" {
   allowed_ip = var.whitelisted_ip
   subnet_id  = concat(module.subnets.public_subnets, module.subnets.private_subnets)
 
-  app_port   = var.app_port
+  app_port = var.app_port
 
 }
 # nacl module resources
@@ -38,9 +38,9 @@ module "nacl" {
   source = "./modules/nacls"
   vpc_id = module.vpc.vpc_id
   # might be mistake here
-  public_subnets     = module.subnets.public_subnets        
+  public_subnets     = module.subnets.public_subnets
   private_subnets    = module.subnets.private_subnets
-  private_cidr_block = "10.0.0.0/16" 
+  private_cidr_block = "10.0.0.0/16"
 }
 # dikkat yha hai
 # route module resources
@@ -68,11 +68,11 @@ module "sonarqube_compute" {
 # finished---------------
 # alb module resources
 module "sonarqube_alb" {
-  source          = "./modules/alb" # Path to the ALB module
-  lb_name         = var.alb_name
-  internal        = false
-  security_groups = [ module.security_groups.public_sg_id.id]
-  subnets = module.subnets.public_subnets
+  source            = "./modules/alb" # Path to the ALB module
+  lb_name           = var.alb_name
+  internal          = false
+  security_groups   = [module.security_groups.public_sg_id.id]
+  subnets           = module.subnets.public_subnets
   vpc_id            = module.vpc.vpc_id
   target_group_name = var.target_group_name
   health_check_path = "/"
@@ -89,22 +89,22 @@ module "sonarqube_alb" {
 module "sonarqube_asg" {
   source             = "./modules/asg"
   asg_name           = var.asg_name
-  desired_capacity    = 2        # must be >=1
-  min_size            = 1
-  max_size            = 3
+  desired_capacity   = 2 # must be >=1
+  min_size           = 1
+  max_size           = 3
   private_subnets    = module.subnets.private_subnets
   target_group_arn   = module.sonarqube_alb.target_group_arn
   launch_template_id = module.sonarqube_compute.launch_template_id
   lb_listener_arn    = module.sonarqube_alb.alb_arn
   # ec2 in
-  key_name      = var.key_name
+  key_name = var.key_name
   #
-  ami_name           = var.ubuntu_ami_id
-  
-  public_subnet_a     = module.subnets.public_subnets[0] # First public subnet
-  public_sg_id = module.security_groups.public_sg_id.id
-  
- 
+  ami_name = var.ubuntu_ami_id
+
+  public_subnet_a = module.subnets.public_subnets[0] # First public subnet
+  public_sg_id    = module.security_groups.public_sg_id.id
+
+
 }
 
 

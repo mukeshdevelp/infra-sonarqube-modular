@@ -101,7 +101,7 @@ variable "ami_name" {
 }
 variable "ubuntu_ami_id" {
   description = "fetching dynamically"
-  type = string
+  type        = string
 }
 
 variable "launch_template_name" {
@@ -120,8 +120,8 @@ variable "instance_type" {
 variable "security_group_ids" {
   description = "List of security group IDs to associate with the EC2 instance."
   type        = list(string)
-  default =  [] 
-  
+  default     = []
+
 }
 
 variable "instance_name" {
@@ -153,13 +153,13 @@ variable "max_size" {
 variable "min_size" {
   description = "The minimum size of the Auto Scaling Group"
   type        = number
-  default = 1
+  default     = 1
 }
 
 variable "private_subnets" {
   description = "The subnets for the Auto Scaling Group"
   type        = list(string)
-  default = []
+  default     = []
 }
 
 variable "target_group_arn" {
@@ -178,8 +178,8 @@ variable "lb_listener_arn" {
 }
 variable "app_port" {
   description = "app port for sonarqube"
-  type = number
-  default = 9000
+  type        = number
+  default     = 9000
 }
 
 # will see after--------------

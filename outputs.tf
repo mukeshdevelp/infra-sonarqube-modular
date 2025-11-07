@@ -19,9 +19,9 @@ output "sonarqube_asg_name" {
 
 output "sonarqube_launch_template_id" {
   description = "The ID of the SonarQube EC2 Launch Template"
-  value       =   module.sonarqube_compute.launch_template_id       
+  value       = module.sonarqube_compute.launch_template_id
 }
 output "alb_target_group_arn" {
   description = "The ARN of the SonarQube target group"
-  value       =  module.sonarqube_alb.target_group_name
+  value       = module.sonarqube_alb.target_group_name
 }

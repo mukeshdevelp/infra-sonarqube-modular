@@ -48,11 +48,11 @@ resource "aws_launch_template" "sonarqube_lt" {
     set -e
     exec > >(tee /var/log/user-data.log) 2>&1
     echo "Starting user data script"
-    apt update -y
-    apt install -y docker.io git
-    systemctl enable docker
-    systemctl start docker
-    docker run -d --name sonarqube -p 9000:9000 sonarqube:lts
+    sudo apt update -y
+    sudo apt install -y docker.io git
+    sudo systemctl enable docker
+    sudo systemctl start docker
+    sudo docker run -d --name sonarqube -p 9000:9000 sonarqube:lts
     echo "Script completed"
 
     EOF
