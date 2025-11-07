@@ -6,6 +6,10 @@ resource "aws_lb" "alb" {
   load_balancer_type = "application"
   security_groups    = [var.public_sg_id]
   subnets            = var.public_subnets
+  tags = {
+    Name = "sonarqube-alb-intenet-facing"
+    type = "load balancer"
+  }
 }
 
 resource "aws_lb_target_group" "tg" {
@@ -16,6 +20,11 @@ resource "aws_lb_target_group" "tg" {
   health_check {
     path = "/"
     port = "9000"
+  }
+  tags = {
+    access = "through alb"
+    subnet = "private"
+    open_port = "9000 and 5432"
   }
 }
 

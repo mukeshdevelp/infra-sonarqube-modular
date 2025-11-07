@@ -1,10 +1,120 @@
 #  Region for deploying resources (default to AWS region)
-
 variable "region" {
   description = "AWS region for deploying resources"
   type        = string
-  default     = "us-east-1"
+
 }
+variable "vpc_cidr_block" {
+  description = "cidr block for vpc"
+  type        = string
+
+}
+# private and public subnet lists
+
+
+variable "public_subnet_a_cidr_block" {
+  description = "public subnet cidr block in az 1a"
+  type        = string
+
+}
+
+variable "public_subnet_b_cidr_block" {
+  description = "public subnet cidr block in az 1b"
+  type        = string
+
+}
+variable "private_subnet_a_cidr_block" {
+  description = "public subnet cidr block in az 1a"
+  type        = string
+
+}
+variable "private_subnet_b_cidr_block" {
+  description = "public subnet cidr block in az 1b"
+  type        = string
+
+}
+
+variable "public_subnet_a_az" {
+  description = "public subnet region in az 1a"
+  type        = string
+
+}
+variable "public_subnet_b_az" {
+  description = "public subnet region in az 1b"
+  type        = string
+
+}
+variable "private_subnet_a_az" {
+  description = "private subnet region in az 1a"
+  type        = string
+
+}
+variable "private_subnet_b_az" {
+  description = "private subnet region in az 1b"
+  type        = string
+
+}
+# enter your ip in tfvars
+variable "whitelisted_ip" {
+  description = "ips that are allowed ssh in bastion host"
+  type = list(string)
+}
+# 0.0.0.0/0
+variable "all_hosts" {
+  description = "all hosts string"
+  type = list(string)
+}
+
+variable "key_pair_name" {
+  description = "key pair name of ec2"
+  type = string
+}
+
+variable "ec2_key_location" {
+  description = "key pair location in the file system"
+  type = string
+}
+
+# compute module starts here
+
+
+variable "instance_size_small" {
+  description = "t2 micro variable"
+  type = string
+  default = "t2.micro"
+}
+
+variable "instance_size_big_for_sonarqube" {
+  description = "sonarqube instance size"
+  type = string
+  default = "t3.medium"
+}
+
+variable "private_sec_group"{
+  type = list(string)
+  description = "consits db postgres and private security group"
+  default = []
+}
+variable "desired_number" {
+  description = "desired number of instances for  asg"
+  type = number
+  
+}
+variable "max_number" {
+  description = "max number of instances for  asg"
+  type = number
+  
+}
+variable "min_number" {
+  description = "min number of instances for  asg"
+  type = number
+  
+}
+#------------------
+# gonna see after
+
+
+/*
 # vpc modules
 variable "vpc_name" {
   description = "name of the vpc"

@@ -150,9 +150,14 @@ terraform-sonarqube/
 │       └── variables.tf
 
 problem 1 - attach ndifferent nacl to different subnets
-problem 2 =- give proper tags
+problem 2 =- give proper tags done
 problem 3 - ec2 public fix
 problem 4 - see the ips of all ec2's
 problem 5 - it should not ask for image id etc from me
+problem 6 - can't access the public ec2
 
 [User Browser] → [ALB:80] → [Target Group:9000] → [SonarQube EC2 in ASG]
+
+
+terraform apply
+./store_ips.sh 

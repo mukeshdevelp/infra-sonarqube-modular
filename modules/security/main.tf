@@ -10,7 +10,7 @@ resource "aws_security_group" "public_sg" {
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = var.everywhere_host
   }
 
   ingress {
@@ -18,7 +18,7 @@ resource "aws_security_group" "public_sg" {
     from_port   = 443
     to_port     = 443
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = var.everywhere_host
   }
 
   ingress {
@@ -26,14 +26,20 @@ resource "aws_security_group" "public_sg" {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["103.87.45.36/32"]
+    cidr_blocks = var.allowed_host
   }
 
   egress {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+    # note - cidr block should be a list
+    cidr_blocks = var.everywhere_host
+  }
+  tags = {
+    Name = "sonarqube-public-sg"
+    attached_to = "pub-subnet-1 and pub-subnet-2"
+    availibility = "1a 1b"
   }
 }
 
@@ -54,7 +60,13 @@ resource "aws_security_group" "private_sg" {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = var.everywhere_host
+  }
+
+  tags = {
+    Name = "sonarqube-private-sg"
+    attached_to = "pri-subnet-1 and pri-subnet-2"
+    availibility = "1a 1b"
   }
 }
 
@@ -66,13 +78,19 @@ resource "aws_security_group" "postgres_sg" {
     from_port       = 5432
     to_port         = 5432
     protocol        = "tcp"
-    security_groups = [aws_security_group.private_sg.id]
+    security_groups = [aws_security_group.private_sg.id]  # Allow traffic from private_sg
   }
 
   egress {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+    # note - cidr block should be a list
+    cidr_blocks = var.everywhere_host
+  }
+  tags = {
+    Name = "sonarqube-db-sg"
+    attached_to = "pri-db-subnet-1 and pri-db-subnet-2"
+    availibility = "1a 1b"
   }
 }
