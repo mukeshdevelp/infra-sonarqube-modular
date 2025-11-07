@@ -36,6 +36,46 @@ root/
 │     ├─ variables.tf  
 │     └─ outputs.tf  
 
+attempt 2 folder structure
+-------------------------------
+terraform-sonarqube/
+├── backend.tf
+├── provider.tf
+├── main.tf
+├── variables.tf
+├── outputs.tf
+│
+├── modules/
+│   ├── vpc/
+│   │   ├── main.tf
+│   │   ├── outputs.tf
+│   │   └── variables.tf
+│   │
+│   ├── network/
+│   │   ├── main.tf
+│   │   ├── outputs.tf
+│   │   └── variables.tf
+│   │
+│   ├── security/
+│   │   ├── main.tf
+│   │   ├── outputs.tf
+│   │   └── variables.tf
+│   │
+│   ├── keypair/
+│   │   ├── main.tf
+│   │   ├── outputs.tf
+│   │   └── variables.tf
+│   │
+│   ├── alb/
+│   │   ├── main.tf
+│   │   ├── outputs.tf
+│   │   └── variables.tf
+│   │
+│   └── compute/
+│       ├── main.tf
+│       ├── outputs.tf
+│       └── variables.tf
+
  
  Error: Unsupported attribute
 │ 
@@ -69,3 +109,49 @@ resource "aws_instance" "sonarqube_instance" {
     Name = var.instance_name
   }
 }
+
+
+terraform-sonarqube/
+├── backend.tf
+├── provider.tf
+├── main.tf
+├── variables.tf
+├── outputs.tf
+│
+├── modules/
+│   ├── vpc/
+│   │   ├── main.tf
+│   │   ├── outputs.tf
+│   │   └── variables.tf
+│   │
+│   ├── network/
+│   │   ├── main.tf
+│   │   ├── outputs.tf
+│   │   └── variables.tf
+│   │
+│   ├── security/
+│   │   ├── main.tf
+│   │   ├── outputs.tf
+│   │   └── variables.tf
+│   │
+│   ├── keypair/
+│   │   ├── main.tf
+│   │   ├── outputs.tf
+│   │   └── variables.tf
+│   │
+│   ├── alb/
+│   │   ├── main.tf
+│   │   ├── outputs.tf
+│   │   └── variables.tf
+│   │
+│   └── compute/
+│       ├── main.tf
+│       ├── outputs.tf
+│       └── variables.tf
+
+problem 1 - attach ndifferent nacl to different subnets
+problem 2 =- give proper tags
+problem 3 - ec2 public fix
+problem 4 - see the ips of all ec2's
+problem 5 - it should not ask for image id etc from me
+

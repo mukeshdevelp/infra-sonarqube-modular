@@ -1,8 +1,5 @@
-#security_groups/main.tf
-# Security Groups # done
+# creating public and private  and db security groups
 
-# Public SG (ALB, SSH)
-#
 resource "aws_security_group" "public_sg" {
   name        = "public-sg"
   description = "Allow HTTP, HTTPS, SSH"
@@ -25,29 +22,24 @@ resource "aws_security_group" "public_sg" {
   }
 
   ingress {
-    description = "SSH from allowed IP"
+    description = "SSH"
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks =  ["0.0.0.0/0"] #var.allowed_ip #original -["103.87.45.36/32"] # Change this
+    cidr_blocks = ["103.87.45.36/32"]
   }
 
   egress {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0", "103.87.45.36/32"]
-  }
-
-  tags = { 
-    Name = "public-sg" 
+    cidr_blocks = ["0.0.0.0/0"]
   }
 }
 
-# Private SG (EC2, internal app)
 resource "aws_security_group" "private_sg" {
   name        = "private-sg"
-  description = "Allow inbound from ALB"
+  description = "Allow ALB to EC2 traffic"
   vpc_id      = var.vpc_id
 
   ingress {
@@ -57,14 +49,6 @@ resource "aws_security_group" "private_sg" {
     protocol        = "tcp"
     security_groups = [aws_security_group.public_sg.id]
   }
-  # ssh access
-   ingress {
-    description     = "SSH from bastion host"
-    from_port       = 22
-    to_port         = 22
-    protocol        = "tcp"
-    security_groups = [aws_security_group.public_sg.id]  # Bastion uses public_sg
-  }
 
   egress {
     from_port   = 0
@@ -72,19 +56,12 @@ resource "aws_security_group" "private_sg" {
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
-
-  tags = {
-    Name = "private-sg"
-  }
 }
 
-# Security Group for PostgreSQL
 resource "aws_security_group" "postgres_sg" {
   name        = "postgres-sg"
-  description = "Allow PostgreSQL access from SonarQube instances"
   vpc_id      = var.vpc_id
 
-  # Allow PostgreSQL traffic only from the private_sg (SonarQube EC2)
   ingress {
     from_port       = 5432
     to_port         = 5432
@@ -92,17 +69,10 @@ resource "aws_security_group" "postgres_sg" {
     security_groups = [aws_security_group.private_sg.id]
   }
 
-  # Allow outbound traffic (DB can reach out if needed)
   egress {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
-
-  tags = {
-    Name = "postgres-sg"
-  }
 }
-
-

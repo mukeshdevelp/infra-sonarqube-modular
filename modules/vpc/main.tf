@@ -1,42 +1,37 @@
-# vpc/main.tf
-resource "aws_vpc" "sonarqube_vpc" {
-  cidr_block           = var.cidr_block
+# creating vpc and subents
+resource "aws_vpc" "this" {
+  cidr_block           = "10.0.0.0/16"
   enable_dns_support   = true
   enable_dns_hostnames = true
-  tags = {
-    Name = var.vpc_name
-
-  }
+  tags = { Name = "sonarqube-vpc" }
 }
 
-# Internet Gateway
-resource "aws_internet_gateway" "igw" {
-  vpc_id = aws_vpc.sonarqube_vpc.id
-  tags = {
-    Name = "${var.vpc_name}-igw"
-  }
+resource "aws_subnet" "public_a" {
+  vpc_id                  = aws_vpc.this.id
+  cidr_block              = "10.0.1.0/24"
+  availability_zone       = "us-east-1a"
+  map_public_ip_on_launch = true
+  tags = { Name = "public-subnet-a" }
 }
 
-# elastic ip for nat gateway
-resource "aws_eip" "nat_eip" {
-  domain = "vpc"
-  tags   = { 
-    Name = "${var.vpc_name}-nat-eip"
-  }
+resource "aws_subnet" "public_b" {
+  vpc_id                  = aws_vpc.this.id
+  cidr_block              = "10.0.2.0/24"
+  availability_zone       = "us-east-1b"
+  map_public_ip_on_launch = true
+  tags = { Name = "public-subnet-b" }
 }
 
-# NAT Gateway (for Private Subnets)
-
-resource "aws_nat_gateway" "nat_gw" {
-  allocation_id = aws_eip.nat_eip.id
-  # receives from the subnet module
-  subnet_id     = var.public_subnets[0]
-  tags = {
-    Name = "${var.vpc_name}-nat"
-  }
+resource "aws_subnet" "private_a" {
+  vpc_id            = aws_vpc.this.id
+  cidr_block        = "10.0.3.0/24"
+  availability_zone = "us-east-1a"
+  tags = { Name = "private-subnet-a" }
 }
 
-
-
-
-
+resource "aws_subnet" "private_b" {
+  vpc_id            = aws_vpc.this.id
+  cidr_block        = "10.0.4.0/24"
+  availability_zone = "us-east-1b"
+  tags = { Name = "private-subnet-b" }
+}

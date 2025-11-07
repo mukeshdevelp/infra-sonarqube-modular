@@ -1,21 +1,11 @@
-# vpc/outputs.tf
-# outputting vpc block #done
 output "vpc_id" {
-  description = "ID of the created VPC"
-  value       = aws_vpc.sonarqube_vpc.id
+  value = aws_vpc.this.id
 }
-# igw id
-output "igw_id" {
-  description = "Internet Gateway ID"
-  value       = aws_internet_gateway.igw.id
+
+output "public_subnets" {
+  value = [aws_subnet.public_a.id, aws_subnet.public_b.id]
 }
-# nat id
-output "nat_gateway_id" {
-  description = "NAT Gateway ID"
-  value       = aws_nat_gateway.nat_gw.id
-}
-# elastic ip with nat id
-output "nat_eip" {
-  description = "Elastic IP for NAT Gateway"
-  value       = aws_eip.nat_eip.public_ip
+
+output "private_subnets" {
+  value = [aws_subnet.private_a.id, aws_subnet.private_b.id]
 }
