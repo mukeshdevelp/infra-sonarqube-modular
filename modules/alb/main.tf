@@ -18,7 +18,7 @@ resource "aws_lb_target_group" "tg" {
   protocol = "HTTP"
   vpc_id   = var.vpc_id
   health_check {
-    path = "/"
+    path = "/api/system/health"
     port = "9000"
   }
   tags = {

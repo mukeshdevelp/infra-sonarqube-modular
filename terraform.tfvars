@@ -21,18 +21,18 @@ private_subnet_b_az = "us-east-1b"
 # ips that are authenticate to use the ssh in bastion host
 whitelisted_ip = ["103.87.45.36/32", "0.0.0.0/0"]
 
-key_pair_name = "sonarqube-key-pair"
+key_pair_name = "sonarqube-key"
 
 ec2_key_location = ".ssh/sonarqube-key.pem"
-all_hosts = [ "0.0.0.0/0" ]
+all_hosts        = ["0.0.0.0/0"]
 # ec2 compute different owners and ami s
 #owners_of_image = ["099720109477"]
-instance_size_small = "t2.micro"
+instance_size_small             = "t2.micro"
 instance_size_big_for_sonarqube = "t3.large"
 
 private_sec_group = []
 
 # for auto scaling group
 desired_number = 2
-max_number = 2
-min_number = 1
+max_number     = 2
+min_number     = 1

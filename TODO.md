@@ -1,3 +1,13 @@
+| Issue                        | Why It Happens                                | How to Fix                            |
+| ---------------------------- | --------------------------------------------- | ------------------------------------- |
+| Health check path wrong      | ALB expects `/health`, but app uses `/status` | Update target group or app            |
+| Port mismatch                | ALB checks 80, app listens on 9000            | Change health check port or SG rules  |
+| SG blocks traffic            | ALB cannot reach target                       | Add inbound rule from ALB SG          |
+| Instance not running service | App crashed or not started                    | Start app or check logs               |
+| NACL blocks traffic          | Stateless firewall denies return traffic      | Open inbound/outbound for ALB subnets |
+
+
+
 root/
 ├─ main.tf           # Calls the modules and passes variables
 ├─ variables.tf      

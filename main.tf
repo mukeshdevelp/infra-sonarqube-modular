@@ -30,20 +30,21 @@ module "network" {
 }
 
 module "security" {
-  source = "./modules/security"
-  vpc_id = module.vpc.vpc_id
-  allowed_host = var.whitelisted_ip
-  everywhere_host = var.all_hosts
-  #public_subnet_a  = 
-  #public_subnet_b = 
-  #private_subnet_a =
-  #private_subnet_b =  
+  source                   = "./modules/security"
+  vpc_id                   = module.vpc.vpc_id
+  allowed_host             = var.whitelisted_ip
+  everywhere_host          = var.all_hosts
+  pub_subnet_a_association = module.vpc.public_subnets[0]
+  pub_subnet_b_association = module.vpc.public_subnets[1]
+  pri_subnet_a_association = module.vpc.private_subnets[0]
+  pri_subnet_b_association = module.vpc.private_subnets[1]
+
 }
 
 module "keypair" {
   source = "./modules/keypair"
   # pointing the child module variable to root module variable
-  key_name = var.key_pair_name
+  key_name     = var.key_pair_name
   key_location = var.ec2_key_location
 }
 
@@ -52,29 +53,29 @@ module "alb" {
   vpc_id         = module.vpc.vpc_id
   public_subnets = module.vpc.public_subnets
   public_sg_id   = module.security.public_sg_id
-  
+
 }
 
 module "compute" {
-  source                = "./modules/compute"
-  private_subnets       = module.vpc.private_subnets
+  source          = "./modules/compute"
+  private_subnets = module.vpc.private_subnets
 
-  private_sg_id         = [ module.security.private_sg_id, module.security.postgres_sg_id ]
-  
-  target_group_arn      = module.alb.target_group_arn
-  
-  public_subnet_a_id    = module.vpc.public_subnets[0]
-  
+  private_sg_id = [module.security.private_sg_id, module.security.postgres_sg_id]
+
+  target_group_arn = module.alb.target_group_arn
+
+  public_subnet_a_id = module.vpc.public_subnets[0]
+
   public_security_group = module.security.public_sg_id
-  
-  key_name              = module.keypair.key_name
-  
+
+  key_name = module.keypair.key_name
+
   sonarqube_instance_size = var.instance_size_big_for_sonarqube
 
   # for asg
   desired_number = var.desired_number
-  max_number = var.max_number
-  min_number = var.min_number
+  max_number     = var.max_number
+  min_number     = var.min_number
 }
 
 
