@@ -1,0 +1,17 @@
+plugin: aws_ec2
+regions:
+  - us-east-1
+filters:
+  "tag:az": 
+    - "1a"
+    - "1b"
+  "instance-state-name": "running"
+hostnames:
+  - private-ip-address    # use private IPs for private instances
+compose:
+  ansible_user: ubuntu
+  # Use a relative key path to the repo-local .ssh dir so the existing key is found
+  ansible_ssh_private_key_file: ./.ssh/sonarqube-key.pem
+  ansible_python_interpreter: /home/mukesh/ansible_venv/bin/python
+  ansible_ssh_common_args: '-o IdentitiesOnly=yes -o StrictHostKeyChecking=no'
+strict: False

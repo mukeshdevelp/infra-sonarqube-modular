@@ -61,20 +61,29 @@ resource "aws_security_group" "private_sg" {
     protocol        = "tcp"
     security_groups = [aws_security_group.public_sg.id]
   }
- 
+  # Allow SSH from the bastion/public SG only
   ingress {
-    description     = "App traffic from ssh"
+    description     = "SSH from bastion SG"
     from_port       = 22
     to_port         = 22
     protocol        = "tcp"
-    security_groups = [aws_security_group.public_sg.id ]
+    security_groups = [aws_security_group.public_sg.id]
+  }
+
+  # Allow SonarQube (9000) and Postgres (5432) traffic within the private SG (self)
+  ingress {
+    description = "SonarQube port from private SG"
+    from_port   = 9000
+    to_port     = 9000
+    protocol    = "tcp"
+    self        = true
   }
   ingress {
-    description     = "App traffic from ssh"
-    from_port       = 22
-    to_port         = 22
-    protocol        = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    description = "Postgres port from private SG"
+    from_port   = 5432
+    to_port     = 5432
+    protocol    = "tcp"
+    self        = true
   }
   ingress {
     description = "HTTP"
@@ -107,7 +116,8 @@ resource "aws_security_group" "postgres_sg" {
     from_port       = 5432
     to_port         = 5432
     protocol        = "tcp"
-    security_groups = [aws_security_group.public_sg.id]  # Allow traffic from private_sg
+    # Allow PostgreSQL only from the private SG (instances running DB/SonarQube)
+    security_groups = [aws_security_group.private_sg.id]
   }
 
   egress {
@@ -129,60 +139,31 @@ resource "aws_security_group" "postgres_sg" {
 
 resource "aws_network_acl" "public_nacl" {
   vpc_id = var.vpc_id
-  # all traffic
-  ingress {
-    protocol   = "-1"
-    rule_no    = 100
-    action     = "allow"
-    cidr_block = "0.0.0.0/0"
-    from_port  = 0
-    to_port    = 0
-  }
-  # ssh port
+  # Allow SSH from whitelisted IPs, HTTP/HTTPS from everywhere and allow all egress
   ingress {
     protocol   = "tcp"
     rule_no    = 110
     action     = "allow"
-    cidr_block = "0.0.0.0/0"
+    cidr_block = var.allowed_host[0]
     from_port  = 22
     to_port    = 22
   }
-  # 8080 port for web access
   ingress {
     protocol   = "tcp"
     rule_no    = 120
     action     = "allow"
     cidr_block = "0.0.0.0/0"
-    from_port  = 8080
-    to_port    = 8080
+    from_port  = 80
+    to_port    = 80
   }
-  # sonarqube server
   ingress {
     protocol   = "tcp"
     rule_no    = 130
     action     = "allow"
     cidr_block = "0.0.0.0/0"
-    from_port  = 9000
-    to_port    = 9000
+    from_port  = 443
+    to_port    = 443
   }
-  # db port
-  ingress {
-    protocol   = "tcp"
-    rule_no    = 140
-    action     = "allow"
-    cidr_block = "0.0.0.0/0"
-    from_port  = 5432
-    to_port    = 5432
-  }
-  ingress {
-    protocol   = "tcp"
-    rule_no    = 150
-    action     = "allow"
-    cidr_block = "0.0.0.0/0"
-    from_port  = 80
-    to_port    = 80
-  }
-  # all allow
   egress {
     protocol   = "-1"
     rule_no    = 100
@@ -190,50 +171,6 @@ resource "aws_network_acl" "public_nacl" {
     cidr_block = "0.0.0.0/0"
     from_port  = 0
     to_port    = 0
-  }
-  # ssh egress
-  egress {
-    protocol   = "tcp"
-    rule_no    = 110
-    action     = "allow"
-    cidr_block = "0.0.0.0/0"
-    from_port  = 22
-    to_port    = 22
-  }
-  # 8080 port egress 
-  egress {
-    protocol   = "tcp"
-    rule_no    = 120
-    action     = "allow"
-    cidr_block = "0.0.0.0/0"
-    from_port  = 8080
-    to_port    = 8080
-  }
-  # sonarqube port egress
-  egress {
-    protocol   = "tcp"
-    rule_no    = 130
-    action     = "allow"
-    cidr_block = "0.0.0.0/0"
-    from_port  = 9000
-    to_port    = 9000
-  }
-  # db egress
-  egress {
-    protocol   = "tcp"
-    rule_no    = 140
-    action     = "allow"
-    cidr_block = "0.0.0.0/0"
-    from_port  = 5432
-    to_port    = 5432
-  }
-  egress {
-    protocol   = "tcp"
-    rule_no    = 150
-    action     = "allow"
-    cidr_block = "0.0.0.0/0"
-    from_port  = 80
-    to_port    = 80
   }
   tags = {
     Name = "public-nacl"
@@ -244,58 +181,40 @@ resource "aws_network_acl" "public_nacl" {
 
 resource "aws_network_acl" "private_nacl" {
   vpc_id = var.vpc_id
-  # all port
+  # Allow internal VPC traffic in private subnets (assume var.everywhere_host contains appropriate VPC CIDRs)
   ingress {
     protocol   = "-1"
     rule_no    = 100
     action     = "allow"
-    cidr_block = "0.0.0.0/0"
+    cidr_block = var.everywhere_host[0]
     from_port  = 0
     to_port    = 0
   }
-  # ssh port
+  # Allow SSH from the bastion/public IPs (restrict to whitelisted public IPs)
   ingress {
     protocol   = "tcp"
     rule_no    = 110
     action     = "allow"
-    cidr_block = "0.0.0.0/0"
+    cidr_block = var.allowed_host[0]
     from_port  = 22
     to_port    = 22
   }
-  # web port
+  # Allow SonarQube and DB ports within private subnets
   ingress {
     protocol   = "tcp"
     rule_no    = 120
     action     = "allow"
-    cidr_block = "0.0.0.0/0"
-    from_port  = 8080
-    to_port    = 8080
+    cidr_block = var.everywhere_host[0]
+    from_port  = 9000
+    to_port    = 9000
   }
-  # sonarqube port
   ingress {
     protocol   = "tcp"
     rule_no    = 130
     action     = "allow"
-    cidr_block = "0.0.0.0/0"
-    from_port  = 9000
-    to_port    = 9000
-  }
-  # db port
-  ingress {
-    protocol   = "tcp"
-    rule_no    = 140
-    action     = "allow"
-    cidr_block = "0.0.0.0/0"
+    cidr_block = var.everywhere_host[0]
     from_port  = 5432
     to_port    = 5432
-  }
-  ingress {
-    protocol   = "tcp"
-    rule_no    = 150
-    action     = "allow"
-    cidr_block = "0.0.0.0/0"
-    from_port  = 80
-    to_port    = 80
   }
   # all allow egress
   egress {

@@ -44,9 +44,9 @@ resource "aws_launch_template" "lt" {
 resource "aws_instance" "private_server_b" {
   ami           = data.aws_ami.ubuntu.id
   instance_type = "t3.large"
-  subnet_id     = var.private_subnets[0]
+  subnet_id     = var.private_subnets[1]
   
-  security_groups = [var.public_security_group]
+  vpc_security_group_ids = var.private_sg
   key_name = var.key_name
  
   tags = {
@@ -59,13 +59,25 @@ resource "aws_instance" "private_server_a" {
   instance_type = "t3.large"
   subnet_id     = var.private_subnets[0]
   
-  security_groups = [var.public_security_group]
+  vpc_security_group_ids = var.private_sg
   key_name = var.key_name
  
   tags = {
     Name = "private-server-1a"
     az = "1a"
   }
+}
+# Attach private instances to ALB target group (SonarQube listens on port 9000)
+resource "aws_lb_target_group_attachment" "private_a_attachment" {
+  target_group_arn = var.target_group_arn
+  target_id        = aws_instance.private_server_a.id
+  port             = 9000
+}
+
+resource "aws_lb_target_group_attachment" "private_b_attachment" {
+  target_group_arn = var.target_group_arn
+  target_id        = aws_instance.private_server_b.id
+  port             = 9000
 }
 # Launch Template (SonarQube EC2)
 
@@ -85,6 +97,7 @@ resource "aws_launch_template" "sonarqube_lt" {
   }
   
 }
+/*
 # auto scaling group
 resource "aws_autoscaling_group" "asg" {
   name                = "sonarqube-asg"
@@ -108,3 +121,4 @@ resource "aws_autoscaling_group" "asg" {
 
   depends_on = []
 }
+*/
