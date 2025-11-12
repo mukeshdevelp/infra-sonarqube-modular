@@ -12,7 +12,13 @@ resource "aws_security_group" "public_sg" {
     protocol    = "tcp"
     cidr_blocks = var.everywhere_host
   }
-
+  ingress{
+    description = "ephemeral ports"
+    from_port   = 0
+    to_port     = 65535
+    protocol    = "tcp"
+    cidr_blocks = var.everywhere_host
+  }
   ingress {
     description = "HTTPS"
     from_port   = 443
@@ -61,7 +67,14 @@ resource "aws_security_group" "private_sg" {
     from_port       = 22
     to_port         = 22
     protocol        = "tcp"
-    security_groups = [aws_security_group.public_sg.id]
+    security_groups = [aws_security_group.public_sg.id ]
+  }
+  ingress {
+    description     = "App traffic from ssh"
+    from_port       = 22
+    to_port         = 22
+    protocol        = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
   }
   ingress {
     description = "HTTP"

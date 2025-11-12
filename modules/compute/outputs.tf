@@ -9,6 +9,12 @@ output "private_ec2_ip" {
   value       = aws_instance.public_ec2.private_ip
 }
 
+# outputs.tf
+output "private_ips" {
+  value = [aws_instance.private_server_b.private_ip, aws_instance.private_server_a.private_ip]
+}
+
+
 
 
 

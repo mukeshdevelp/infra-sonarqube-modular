@@ -5,7 +5,7 @@ variable "public_security_group" {
 
 }
 variable "target_group_arn" {
-
+  
 }
 variable "key_name" {
     description = "ec2 private key name"
@@ -15,7 +15,7 @@ variable public_subnet_a_id{
     description = "private subnet a id"
     type = string
 }
-variable private_sg_id{
+variable private_sg{
     description = "private security groups id"
     type = list(string)
 }
@@ -47,4 +47,8 @@ variable "min_number" {
   description = "min number of instances for  asg"
   type = number
   
+}
+
+variable "alb_listener" {
+  description = "listenner for alb"
 }

@@ -1,7 +1,7 @@
 # consists alb target groups and listeners
 
 resource "aws_lb" "alb" {
-  name               = "sonarqube-alb"
+  name               = "sonarqube-alb-internet"
   internal           = false
   load_balancer_type = "application"
   security_groups    = [var.public_sg_id]
@@ -18,7 +18,7 @@ resource "aws_lb_target_group" "tg" {
   protocol = "HTTP"
   vpc_id   = var.vpc_id
   health_check {
-    path = "/api/system/health"
+    path = "/"
     port = "9000"
   }
   tags = {
@@ -27,6 +27,7 @@ resource "aws_lb_target_group" "tg" {
     open_port = "9000 and 5432"
   }
 }
+
 
 resource "aws_lb_listener" "listener" {
   load_balancer_arn = aws_lb.alb.arn

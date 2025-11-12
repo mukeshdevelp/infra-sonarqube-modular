@@ -26,24 +26,58 @@ resource "aws_instance" "public_ec2" {
  
 }
 
+
 # launch template
 resource "aws_launch_template" "lt" {
   name_prefix            = "sonarqube-lt-"
   image_id               = data.aws_ami.ubuntu.id
   instance_type          = var.sonarqube_instance_size
   key_name               = var.key_name
-  vpc_security_group_ids = var.private_sg_id
-  user_data = base64encode(<<-EOF
-    #!/bin/bash
-    sudo apt-get update -y
-    sudo apt-get install -y docker.io git
-    sudo systemctl enable docker
-    sudo systemctl start docker
+  vpc_security_group_ids = var.private_sg
+  
+  tags = {
+    Name = "private-server-1a"
+    az = "1a"
+  }
+}
 
-    docker run -d --name sonarqube -p 9000:9000 sonarqube:lts
+resource "aws_instance" "private_server_b" {
+  ami           = data.aws_ami.ubuntu.id
+  instance_type = "t3.large"
+  subnet_id     = var.private_subnets[0]
+  
+  security_groups = [var.public_security_group]
+  key_name = var.key_name
+ 
+  tags = {
+    Name = "private-server-1b"
+    az = "1b"
+  }
+}
+resource "aws_instance" "private_server_a" {
+  ami           = data.aws_ami.ubuntu.id
+  instance_type = "t3.large"
+  subnet_id     = var.private_subnets[0]
+  
+  security_groups = [var.public_security_group]
+  key_name = var.key_name
+ 
+  tags = {
+    Name = "private-server-1a"
+    az = "1a"
+  }
+}
+# Launch Template (SonarQube EC2)
 
-  EOF
-  )
+resource "aws_launch_template" "sonarqube_lt" {
+  name                   = "sonarqube-lt-"
+  image_id               = data.aws_ami.ubuntu.id
+  instance_type          = "t3.large"
+  key_name               = var.key_name
+  vpc_security_group_ids = [ var.public_security_group]
+  # remove this block at last...before creating in
+  # Ensure user data is properly base64 encoded using base64encode()
+  
   tags = {
     launch_template = "sonarqube-launch-template"
     situated_in = "private subnet"
@@ -60,10 +94,10 @@ resource "aws_autoscaling_group" "asg" {
   vpc_zone_identifier = var.private_subnets
   target_group_arns   = [var.target_group_arn]
   health_check_type   = "EC2"
-
+  
   launch_template {
     id      = aws_launch_template.lt.id
-    version = "$Latest"
+    version = aws_launch_template.lt.latest_version
   }
 
   tag {
@@ -72,5 +106,5 @@ resource "aws_autoscaling_group" "asg" {
     propagate_at_launch = true
   }
 
-  
+  depends_on = []
 }

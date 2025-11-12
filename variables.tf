@@ -110,6 +110,11 @@ variable "min_number" {
   type        = number
 
 }
+variable "alb_listener" {
+  description = "listener on which asg is going to depend"
+  type        = list(string)
+}
+
 #------------------
 # gonna see after
 

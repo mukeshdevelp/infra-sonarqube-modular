@@ -48,12 +48,18 @@ resource "aws_route_table" "private_rt" {
     cidr_block     = "0.0.0.0/0"
     nat_gateway_id = aws_nat_gateway.nat_gw.id
   }
+  tags = {
+    Name = "sonarqube-private-route-table"
+    attatched_to = "public-subnet-1 and public-subnet-2"
+
+  }
 }
 
 # associating public rt to public a subnet
 resource "aws_route_table_association" "public_a" {
   subnet_id      = element(var.public_subnets, 0)
   route_table_id = aws_route_table.public_rt.id
+  
 }
 
 # associating public rt to public b subnet

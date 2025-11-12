@@ -1,91 +1,3 @@
-
-# Root Module (main.tf)
-
-module "vpc" {
-  source                     = "./modules/vpc"
-  vpc_cidr_block             = var.vpc_cidr_block
-  public_subnet_a_az         = var.public_subnet_a_az
-  public_subnet_a_cidr_block = var.public_subnet_a_cidr_block
-
-  public_subnet_b_az         = var.public_subnet_b_az
-  public_subnet_b_cidr_block = var.public_subnet_b_cidr_block
-
-
-
-  private_subnet_a_cidr_block = var.private_subnet_a_cidr_block
-
-  private_subnet_a_az = var.private_subnet_a_az
-
-  private_subnet_b_cidr_block = var.private_subnet_b_cidr_block
-
-  private_subnet_b_az = var.private_subnet_b_az
-}
-
-module "network" {
-  source          = "./modules/network"
-  vpc_id          = module.vpc.vpc_id
-  public_subnets  = module.vpc.public_subnets
-  private_subnets = module.vpc.private_subnets
-
-}
-
-module "security" {
-  source                   = "./modules/security"
-  vpc_id                   = module.vpc.vpc_id
-  allowed_host             = var.whitelisted_ip
-  everywhere_host          = var.all_hosts
-  pub_subnet_a_association = module.vpc.public_subnets[0]
-  pub_subnet_b_association = module.vpc.public_subnets[1]
-  pri_subnet_a_association = module.vpc.private_subnets[0]
-  pri_subnet_b_association = module.vpc.private_subnets[1]
-
-}
-
-module "keypair" {
-  source = "./modules/keypair"
-  # pointing the child module variable to root module variable
-  key_name     = var.key_pair_name
-  key_location = var.ec2_key_location
-}
-
-module "compute" {
-  source          = "./modules/compute"
-  private_subnets = module.vpc.private_subnets
-
-  private_sg = [module.security.private_sg_id, module.security.postgres_sg_id]
-
-  target_group_arn = module.alb.target_group_arn
-
-  public_subnet_a_id = module.vpc.public_subnets[0]
-
-  public_security_group = module.security.public_sg_id
-
-  key_name = module.keypair.key_name
-
-  sonarqube_instance_size = var.instance_size_big_for_sonarqube
-
-  # for asg
-  desired_number = var.desired_number
-  max_number     = var.max_number
-  min_number     = var.min_number
-  alb_listener   = [module.alb.alb_listener]
-}
-
-module "alb" {
-  source         = "./modules/alb"
-  vpc_id         = module.vpc.vpc_id
-  public_subnets = module.vpc.public_subnets
-  public_sg_id   = module.security.public_sg_id
-
-}
-
-
-
-
-/*
-# going to write it again
-
-
 # Terraform Backend
 
 terraform {
@@ -96,7 +8,7 @@ terraform {
     }
     
   }
-
+  /*
   backend "s3" {
     bucket         = "sonarqube-terraform-state-1"
     key            = "terraform.tfstate"
@@ -105,6 +17,7 @@ terraform {
     use_lockfile = true
     encrypt        = true
   }
+  */
 }
 
 provider "aws" {
@@ -179,7 +92,9 @@ resource "aws_subnet" "private_subnet_b" {
 
 resource "aws_eip" "nat_eip" {
   domain = "vpc"
-  tags   = { Name = "nat-eip" }
+  tags   = { 
+    Name = "nat-eip" 
+  }
 }
 
 resource "aws_nat_gateway" "nat_gw" {
@@ -264,7 +179,7 @@ resource "aws_security_group" "public_sg" {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["103.87.45.36/32"] # Change this
+    cidr_blocks = ["103.87.45.36/32", "0.0.0.0/0"] # Change this
   }
 
   egress {
@@ -282,7 +197,34 @@ resource "aws_security_group" "private_sg" {
   name        = "private-sg"
   description = "Allow inbound from ALB"
   vpc_id      = aws_vpc.sonarqube_vpc.id
-
+  ingress {
+    description     = "App traffic from ALB"
+    from_port       = 0
+    to_port         = 0
+    protocol        = "tcp"
+    security_groups = [aws_security_group.public_sg.id]
+  }
+  ingress {
+    description     = "App traffic from ALB"
+    from_port       = 80
+    to_port         = 80
+    protocol        = "tcp"
+    security_groups = [aws_security_group.public_sg.id]
+  }
+  ingress {
+    description     = "App traffic from ALB"
+    from_port       = 443
+    to_port         = 443
+    protocol        = "tcp"
+    security_groups = [aws_security_group.public_sg.id]
+  }
+  ingress {
+    description     = "App traffic from ALB"
+    from_port       = 22
+    to_port         = 22
+    protocol        = "tcp"
+    security_groups = [aws_security_group.public_sg.id]
+  }
   ingress {
     description     = "App traffic from ALB"
     from_port       = 9000
@@ -290,7 +232,12 @@ resource "aws_security_group" "private_sg" {
     protocol        = "tcp"
     security_groups = [aws_security_group.public_sg.id]
   }
-
+  ingress {
+    from_port       = 5432
+    to_port         = 5432
+    protocol        = "tcp"
+    security_groups = [aws_security_group.public_sg.id]
+  }
   egress {
     from_port   = 0
     to_port     = 0
@@ -302,6 +249,7 @@ resource "aws_security_group" "private_sg" {
     Name = "private-sg"
   }
 }
+/*
 # Security Group for PostgreSQL
 resource "aws_security_group" "postgres_sg" {
   name        = "postgres-sg"
@@ -328,7 +276,7 @@ resource "aws_security_group" "postgres_sg" {
     Name = "postgres-sg"
   }
 }
-
+*/
 
 # Network ACLs (Simplified)
 
@@ -356,6 +304,7 @@ resource "aws_network_acl" "public_nacl" {
   }
 }
 
+
 resource "aws_network_acl" "private_nacl" {
   vpc_id = aws_vpc.sonarqube_vpc.id
   ingress {
@@ -366,6 +315,7 @@ resource "aws_network_acl" "private_nacl" {
     from_port  = 0
     to_port    = 0
   }
+  
   egress {
     protocol   = "-1"
     rule_no    = 100
@@ -413,7 +363,8 @@ resource "aws_lb" "sonarqube_alb" {
     aws_subnet.public_subnet_b.id
   ]
   tags = {
-  Name = "sonarqube-alb" }
+  Name = "sonarqube-alb"
+ }
 }
 
 resource "aws_lb_target_group" "sonarqube_tg" {
@@ -424,9 +375,15 @@ resource "aws_lb_target_group" "sonarqube_tg" {
   health_check {
     path = "/"
     port = "9000"
+    matcher = "200-499"
   }
   tags = {
     Name = "sonarqube-tg"
+  }
+  stickiness {
+    enabled  = true
+    type     = "lb_cookie"
+    cookie_duration = 3600 # seconds
   }
 }
 
@@ -454,38 +411,217 @@ data "aws_ami" "ubuntu" {
     values = ["hvm"]
   }
 }
+# for creating an image
+resource "aws_instance" "sonarqube_instance_for_image" {
+  ami           = data.aws_ami.ubuntu.id
+  instance_type = "t3.medium"
+  subnet_id     = aws_subnet.public_subnet_a.id
+  associate_public_ip_address = true   
+  security_groups = [aws_security_group.public_sg.id]
+  key_name = aws_key_pair.sonarqube_key.key_name
+  user_data = <<-EOF
+  
+  #!/bin/bash
+  sudo su root
+  sudo apt-get update -y
+  sudo apt-get install -y docker.io
+  sudo systemctl enable docker && systemctl start docker
+  sudo groupadd docker
+  sudo usermod -aG docker $USER
+  # Create docker network
+  sudo docker network create sonarnet
+
+  # Run Postgres
+  sudo docker run -d --name postgres \
+    --network sonarnet \
+    -e POSTGRES_USER=sonar \
+    -e POSTGRES_PASSWORD=sonar \
+    -e POSTGRES_DB=sonar \
+    -v /var/lib/postgresql/data:/var/lib/postgresql/data \
+    postgres:15
+
+  # Run SonarQube
+  sudo docker run -d --name sonarqube \
+    --network sonarnet \
+    -p 9000:9000 \
+    -e SONAR_JDBC_URL=jdbc:postgresql://postgres:5432/sonar \
+    -e SONAR_JDBC_USERNAME=sonar \
+    -e SONAR_JDBC_PASSWORD=sonar \
+    sonarqube:lts
+  EOF
+  
+  tags = {
+    Name = "template ami"
+  }
+  
+}
+# creating an image
+resource "aws_ami_from_instance" "sonarqube_ami" {
+  name               = "sonarqube-ami-${formatdate("YYYY-MM-DD-HH-mm-ss", timestamp())}"
+  source_instance_id = aws_instance.sonarqube_instance_for_image.id
+  snapshot_without_reboot = true
+  depends_on = [ aws_instance.sonarqube_instance_for_image ]
+  tags = {
+    Name = "SonarQube AMI"
+  }
+}
+
+resource "aws_instance" "bastion_host" {
+  ami           = data.aws_ami.ubuntu.id
+  instance_type = "t2.micro"
+  subnet_id     = aws_subnet.public_subnet_a.id
+  associate_public_ip_address = true   
+  security_groups = [aws_security_group.public_sg.id]
+  key_name = aws_key_pair.sonarqube_key.key_name
+  tags = {
+    Name = "bastion_host"
+  }
+}
+
+
+resource "aws_instance" "private_server_a" {
+  ami           = data.aws_ami.ubuntu.id
+  instance_type = "t3.large"
+  subnet_id     = aws_subnet.private_subnet_a.id
+ 
+  security_groups = [aws_security_group.private_sg.id]
+  key_name = aws_key_pair.sonarqube_key.key_name
+  user_data = <<-EOF
+ 
+  #!/bin/bash
+  sudo su root
+  sudo apt-get update -y
+  sudo apt-get install -y docker.io
+  sudo systemctl enable docker && systemctl start docker
+  sudo groupadd docker
+  sudo usermod -aG docker $USER
+  # Create docker network
+  sudo docker network create sonarnet
+
+  # Run Postgres
+  sudo docker run -d --name postgres \
+    --network sonarnet \
+    -e POSTGRES_USER=sonar \
+    -e POSTGRES_PASSWORD=sonar \
+    -e POSTGRES_DB=sonar \
+    -v /var/lib/postgresql/data:/var/lib/postgresql/data \
+    postgres:15
+
+  # Run SonarQube
+  sudo docker run -d --name sonarqube \
+    --network sonarnet \
+    -p 9000:9000 \
+    -e SONAR_JDBC_URL=jdbc:postgresql://postgres:5432/sonar \
+    -e SONAR_JDBC_USERNAME=sonar \
+    -e SONAR_JDBC_PASSWORD=sonar \
+    sonarqube:lts
+  EOF
+  
+  tags = {
+    Name = "private-server-1a"
+    az = "1a"
+  }
+}
+
+resource "aws_instance" "private_server_b" {
+  ami           = data.aws_ami.ubuntu.id
+  instance_type = "t3.large"
+  subnet_id     = aws_subnet.private_subnet_b.id
+  
+  security_groups = [aws_security_group.private_sg.id]
+  key_name = aws_key_pair.sonarqube_key.key_name
+  user_data = <<-EOF
+  
+ 
+  #!/bin/bash
+  sudo su root
+  sudo apt-get update -y
+  sudo apt-get install -y docker.io
+  sudo systemctl enable docker && systemctl start docker
+  sudo groupadd docker
+  sudo usermod -aG docker $USER
+  # Create docker network
+  sudo docker network create sonarnet
+
+  # Run Postgres
+  sudo docker run -d --name postgres \
+    --network sonarnet \
+    -e POSTGRES_USER=sonar \
+    -e POSTGRES_PASSWORD=sonar \
+    -e POSTGRES_DB=sonar \
+    -v /var/lib/postgresql/data:/var/lib/postgresql/data \
+    postgres:15
+
+  # Run SonarQube
+  sudo docker run -d --name sonarqube \
+    --network sonarnet \
+    -p 9000:9000 \
+    -e SONAR_JDBC_URL=jdbc:postgresql://postgres:5432/sonar \
+    -e SONAR_JDBC_USERNAME=sonar \
+    -e SONAR_JDBC_PASSWORD=sonar \
+    sonarqube:lts
+  EOF
+  tags = {
+    Name = "private-server-1b"
+    az = "1b"
+  }
+}
 
 # Launch Template (SonarQube EC2)
-
+#using the  imaeg in lt
 resource "aws_launch_template" "sonarqube_lt" {
   name                   = "sonarqube-lt-"
-  image_id           	 = data.aws_ami.ubuntu # Replace with the correct Ubuntu AMI or machine ami ID
+  image_id               = aws_ami_from_instance.sonarqube_ami.id
   instance_type          = "t3.large"
   key_name               = aws_key_pair.sonarqube_key.key_name
   vpc_security_group_ids = [aws_security_group.private_sg.id]
   # remove this block at last...before creating in
   # Ensure user data is properly base64 encoded using base64encode()
   user_data = base64encode(<<-EOF
-    #!/bin/bash
-   
-    sudo apt-get update -y
-    sudo apt-get install -y docker.io git
-    sudo systemctl enable docker
-    sudo systemctl start docker
+  
+  #!/bin/bash
+  sudo su root
+  sudo apt-get update -y
+  sudo apt-get install -y docker.io
+  sudo systemctl enable docker && systemctl start docker
+  sudo groupadd docker
+  sudo usermod -aG docker $USER
+  # Create docker network
+  sudo docker network create sonarnet
 
-    docker run -d --name sonarqube -p 9000:9000 sonarqube:lts
-    EOF
+  # Run Postgres
+  sudo docker run -d --name postgres \
+    --network sonarnet \
+    -e POSTGRES_USER=sonar \
+    -e POSTGRES_PASSWORD=sonar \
+    -e POSTGRES_DB=sonar \
+    -v /var/lib/postgresql/data:/var/lib/postgresql/data \
+    postgres:15
+
+  # Run SonarQube
+  sudo docker run -d --name sonarqube \
+    --network sonarnet \
+    -p 9000:9000 \
+    -e SONAR_JDBC_URL=jdbc:postgresql://postgres:5432/sonar \
+    -e SONAR_JDBC_USERNAME=sonar \
+    -e SONAR_JDBC_PASSWORD=sonar \
+    sonarqube:lts
+  EOF
+   
   )
 
+  
   tag_specifications {
     resource_type = "instance"
-    tags          = { Name = "sonarqube-instance" }
+    tags          = { 
+      Name = "sonarqube-instance" 
+    }
   }
 }
 
 
 # Auto Scaling Group (ASG)
-
+# using the lt in asg
 resource "aws_autoscaling_group" "sonarqube_asg" {
   name             = "sonarqube-asg"
   desired_capacity = 2
@@ -507,10 +643,15 @@ resource "aws_autoscaling_group" "sonarqube_asg" {
     key                 = "Name"
     value               = "sonarqube-instance"
     propagate_at_launch = true
+   
+    
+  
   }
 
   depends_on = [aws_lb_listener.alb_listener]
 }
+
+
 
 
 # Outputs
@@ -523,4 +664,16 @@ output "alb_dns_name" {
 output "vpc_id" {
   value = aws_vpc.sonarqube_vpc.id
 }
-*/
+
+output "aws_public_instance_ip" {
+  description = "private server ip in az1"
+  value = aws_instance.private_server_a
+}
+
+output "aws_private_instance_ip" {
+  description = "private server ip in az2"
+  value = aws_instance.private_server_b
+}
+
+
+
