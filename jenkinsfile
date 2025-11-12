@@ -1,0 +1,90 @@
+pipeline{
+    // WARNING -> keep these same -> aws-credentials, credentialId:github-user-password and aws provider region in main.tf and in pipeline same in both. if any error occur or token expire just change the secret do not change the id or name of any token
+    agent any;
+    environment {
+        
+        AWS_CREDS = credentials('aws-credentials')
+        // Terraform variables (adjust as per your setup)
+        TF_VAR_region = 'us-east-1'
+        TF_VAR_bucket_name = 'sonarqube-terraform-state-123'
+        TF_VAR_dynamodb_table = 'terraform-locks-123'
+    }
+     stages{
+         
+        stage('git checkout'){
+             steps {
+                 checkout scmGit(branches: [[name: '*/main']], extensions: [], userRemoteConfigs: [[credentialsId: 'github-user-password', url: 'https://github.com/mukeshdevelp/infra-sonarqube.git']])
+            }
+        }
+        stage('AWS CLI Test and initialization') {
+            steps {
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws-credentials',  // your Jenkins AWS credentials ID
+                    accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                    ]]) {
+                    // Using the AWS credentials in the environment
+                    sh '''
+                    # Run an AWS CLI command to list S3 buckets as a test
+                    aws s3 ls
+                    terraform init
+                    echo "terraform initialized"
+                   '''
+                }
+            }
+        }
+
+       
+
+        stage('terraform formatting'){
+            steps{
+                sh """
+                    terraform fmt
+                    echo 'formatted terraform code'
+
+                """
+            }
+        }
+
+        stage('terraform validate'){
+            steps{
+                sh """
+                    terraform validate
+                    echo 'validated terraform code'
+                    
+                """
+            }
+        }
+
+        stage('terraform plan'){
+            steps{
+                sh """
+                    terraform plan
+                    echo 'planning terraform code'
+                    
+                """
+            }
+        }
+
+        stage('terraform apply'){
+            steps{
+                sh """
+                    terraform apply --auto-approve
+                    echo 'creating infra'
+                    echo 'check logs for alb link...'
+                    
+                """
+            }
+        }
+     }
+
+    post {
+        success {
+            echo "Stage 1 & 2 completed successfully: repo checked out and infra provisioned."
+        }
+        failure {
+            echo "Pipeline failed. Check console output for errors."
+        }
+    }  
+}

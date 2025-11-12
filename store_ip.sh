@@ -1,8 +1,3 @@
 #!/bin/bash
-
-# Capture the Terraform output
-terraform output public_ec2_ip > public_ips.txt
-terraform output private_ec2_ip >> public_ips.txt
-terraform output asg_instance_ips >> public_ips.txt
-
-echo "Public and Private IPs have been saved to public_ips.txt"
+terraform output -json public_ip_of_bastion  > private_ips.txt
+terraform output -json aws_private_instance_ip | jq -r '.[]' >> private_ips.txt

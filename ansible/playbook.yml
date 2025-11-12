@@ -1,6 +1,6 @@
 ---
 - name: Install SonarQube with PostgreSQL
-  hosts: sonarqube_servers
+  hosts: sonarqube_private_servers
   become: yes
 
   vars:

@@ -15,3 +15,6 @@ output "aws_private_instance_ip" {
   description = "these are the private isntacne ips"
   value = module.compute.private_ips
 }
+output "user" {
+    value = ["ubuntu" , "ubuntu"]
+}
