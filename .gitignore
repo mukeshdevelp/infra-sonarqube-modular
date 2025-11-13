@@ -8,3 +8,7 @@ tfplan
 .ssh/
 .venv
 *.tfstate.backup
+terraform.tfstate.backup
+terraform.tfstate.d/
+terraform.tfstate
+terra
