@@ -48,7 +48,15 @@ resource "aws_instance" "private_server_b" {
   
   vpc_security_group_ids = var.private_sg
   key_name = var.key_name
- 
+  user_data = <<-EOF
+              #!/bin/bash
+              sudo apt-get update -y
+              sudo apt-get install docker.io -y
+              sudo systemctl start docker
+              sudo systemctl enable docker
+              sudo usermod -aG docker @USER
+              sudo docker run -p 9000:9000 -d sonarqube:lts              
+              EOF
   tags = {
     Name = "private-server-1b"
     az = "1b"

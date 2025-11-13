@@ -60,3 +60,32 @@ pipeline {
         failure { echo "Pipeline failed. Check console output for errors." }
     }
 }
+
+
+/*
+ stage('Fetch Terraform Outputs') {
+            steps {
+                script {
+                    // Fetch all outputs as JSON
+                    def tfOutputs = sh(
+                        script: "terraform output -json",
+                        returnStdout: true
+                    ).trim()
+
+                    // Parse JSON string to Groovy map
+                    def outputs = readJSON text: tfOutputs
+
+                    // Extract variables and store in env
+                    env.ALB_DNS_NAME = outputs.alb_dns_name.value
+                    env.BASTION_IP = outputs.public_ip_of_bastion.value
+                    env.PRIVATE_IPS = outputs.aws_private_instance_ip.value.join(',')
+                    env.USERS = outputs.user.value.join(',')
+                    env.VPC_ID = outputs.vpc_id.value
+
+                    echo "ALB DNS: ${env.ALB_DNS_NAME}"
+                    echo "Bastion IP: ${env.BASTION_IP}"
+                    echo "Private IPs: ${env.PRIVATE_IPS}"
+                    echo "VPC ID: ${env.VPC_ID}"
+                }
+            }
+        }*/
