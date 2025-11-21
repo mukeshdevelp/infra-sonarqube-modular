@@ -67,7 +67,17 @@ resource "aws_security_group" "private_sg" {
     from_port       = 22
     to_port         = 22
     protocol        = "tcp"
+    # Allow SSH from the public (bastion) security group
     security_groups = [aws_security_group.public_sg.id]
+  }
+
+  # Also allow SSH from the requester VPC CIDR (peer VPC)
+  ingress {
+    description = "SSH from requester VPC CIDR"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["173.0.0.0/16"]
   }
 
   # Allow SonarQube (9000) and Postgres (5432) traffic within the private SG (self)
@@ -150,6 +160,22 @@ resource "aws_network_acl" "public_nacl" {
   }
   ingress {
     protocol   = "tcp"
+    rule_no    = 1700
+    action     = "allow"
+    cidr_block = "173.0.0.0/16"
+    from_port  = 22
+    to_port    = 22
+  }
+  ingress {
+    protocol   = "tcp"
+    rule_no    = 1800
+    action     = "allow"
+    cidr_block = "10.0.0.0/16"
+    from_port  = 22
+    to_port    = 22
+  }
+  ingress {
+    protocol   = "tcp"
     rule_no    = 120
     action     = "allow"
     cidr_block = "0.0.0.0/0"
@@ -196,6 +222,15 @@ resource "aws_network_acl" "private_nacl" {
     rule_no    = 110
     action     = "allow"
     cidr_block = var.allowed_host[0]
+    from_port  = 22
+    to_port    = 22
+  }
+  ingress {
+    protocol   = "tcp"
+    # Use a different rule number to avoid duplicate entry errors
+    rule_no    = 111
+    action     = "allow"
+    cidr_block = "173.0.0.0/16"
     from_port  = 22
     to_port    = 22
   }

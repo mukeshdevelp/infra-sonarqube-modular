@@ -52,6 +52,7 @@ resource "aws_instance" "private_server_b" {
   tags = {
     Name = "private-server-1b"
     az = "1b"
+    env = "sonarqube"
   }
 }
 resource "aws_instance" "private_server_a" {
@@ -65,6 +66,7 @@ resource "aws_instance" "private_server_a" {
   tags = {
     Name = "private-server-1a"
     az = "1a"
+    env = "sonarqube"
   }
 }
 # Attach private instances to ALB target group (SonarQube listens on port 9000)

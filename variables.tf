@@ -119,6 +119,7 @@ variable "alb_listener" {
 variable "existing_vpc_id" {
   type        = string
   description = "Existing VPC ID for 173.0.0.0/16"
+  
 }
 
 variable "new_vpc_id" {
@@ -129,11 +130,13 @@ variable "new_vpc_id" {
 variable "existing_route_table_ids" {
   type        = list(string)
   description = "Route tables of existing VPC (173/16)"
+  default     = []
 }
 
 variable "new_route_table_ids" {
   type        = list(string)
   description = "Private route tables of new VPC (10/16)"
+  default     = []
 }
 
 #------------------

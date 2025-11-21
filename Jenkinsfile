@@ -50,15 +50,31 @@ pipeline {
             steps { sh 'terraform destroy --auto-approve && echo "creating infra"' }
         }
         stage('storing the private ips') {
-    steps {
-        sh "./store_ip.sh"
-    }
-}
-        stage('moving the file in inventory'){
-            steps{ 
-                sh """
-                    cp private_ips.ini ./ansible/inventory.ini
-                """
+            steps {
+             sh "./store_ip.sh"
+         }
+    }   
+        // copy the ssh key to ec2 server
+        stage('copy ssh key to ec2 server') {
+            steps {
+                sh 'scp -o StrictHostKeyChecking=no -i ${SSH_KEY_PATH} ${SSH_KEY_PATH} ubuntu@$(cat private_ip.txt):~/.ssh/sonarqube-key.pem'
+                
+            }
+        }
+        stage('Test Dynamic Inventory') {
+            steps {
+                sh '''
+                echo "Testing dynamic inventory..."
+                ansible-inventory -i aws_ec2.yml --list
+                '''
+            }
+        }
+
+        stage('Run Ansible Playbook') {
+            steps {
+                sh '''
+                ansible-playbook -i inventory/aws_ec2.yml ansible/playbook.yml
+                '''
             }
         }
     }

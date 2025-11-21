@@ -111,7 +111,7 @@ module "vpc_peering" {
   accepter_vpc_id   = module.vpc.vpc_id     # <-- Your newly created VPC
   accepter_vpc_cidr = module.vpc.vpc_cidr_block # usually 10.0.0.0/16
 
-  accepter_route_tables = module.network.private_rt_id
+  accepter_route_tables = [module.network.private_rt_id]
   # OR hardcode:
   # accepter_route_tables = ["rtb-yyyyyyy"]
 
