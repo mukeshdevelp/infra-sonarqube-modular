@@ -8,15 +8,6 @@
     db_user: sonar
     db_password: sonarpassword
     sonar_version: 10.5.0.56789  # change to latest if needed
-# commonn llink
-# https://binaries.sonarsource.com/Distribution/sonarqube/sonarqube-25.8.0.112029.zip
-# https://binaries.sonarsource.com/Distribution/sonarqube/sonarqube-4.3.zip
-# permenant solution for map count
-#echo "vm.max_map_count=524288" | sudo tee -a /etc/sysctl.conf
-#echo "fs.file-max=131072" | sudo tee -a /etc/sysctl.conf
-#sudo sysctl -p
-#tail -f /opt/sonarqube/logs/sonar.log
-#tail -f /opt/sonarqube/logs/es.log
 
   tasks:
 
