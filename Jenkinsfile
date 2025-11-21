@@ -1,91 +1,139 @@
 pipeline {
     agent any
+
     environment {
         AWS_CREDS = credentials('aws-credentials')
-        // Terraform variables (adjust as per your setup)
         TF_VAR_region = 'us-east-1'
         TF_VAR_bucket_name = 'sonarqube-terraform-state-12'
-        //TF_VAR_dynamodb_table = 'terraform-locks-123'
         SSH_KEY_PATH = "${WORKSPACE}/.ssh/sonarqube-key.pem"
+        // virtual env path
+        VENV_PATH = "${WORKSPACE}/venv"
     }
+
     stages {
-        stage('Git Checkout') {
+
+        stage('Git Checkout - Terraform Repo') {
             steps {
                 checkout([$class: 'GitSCM',
-                          branches: [[name: '*/main']],
-                          doGenerateSubmoduleConfigurations: false,
-                          extensions: [],
-                          userRemoteConfigs: [[url: 'https://github.com/mukeshdevelp/infra-sonarqube-modular.git', credentialsId: 'github-pat-token']]])
+                    branches: [[name: '*/main']],
+                    doGenerateSubmoduleConfigurations: false,
+                    extensions: [],
+                    userRemoteConfigs: [[
+                        url: 'https://github.com/mukeshdevelp/infra-sonarqube-modular.git',
+                        credentialsId: 'github-user-password'
+                    ]]
+                ])
             }
         }
+
         stage('AWS CLI Test & Terraform Init') {
             steps {
                 withCredentials([[$class: 'AmazonWebServicesCredentialsBinding',
-                                  credentialsId: 'aws-credentials',
-                                  accessKeyVariable: 'AWS_ACCESS_KEY_ID',
-                                  secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']]) {
+                    credentialsId: 'aws-credentials',
+                    accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                ]]) {
                     sh '''
                         aws s3 ls
-                        terraform init
+                        terraform init --reconfigure
                         echo "terraform initialized"
                     '''
                 }
             }
         }
+
         stage('Terraform Formatting') {
-            steps { sh 'terraform fmt && echo "formatted terraform code"' }
-        }
-        stage('Terraform Validate') {
-            steps { sh 'terraform validate && echo "validated terraform code"' }
-        }
-        stage('Terraform Plan') {
-            steps { sh 'terraform plan && echo "planning terraform code"' }
-        }
-        
-        stage('Terraform apply') {
-            steps { sh 'terraform destroy --auto-approve && echo "creating infra"' }
-        }
-        stage('storing the private ips') {
             steps {
-             sh "./store_ip.sh"
-         }
-    }   
-         }
-        stage('Git Checkout') {
+                sh 'terraform fmt && echo "formatted terraform code"'
+            }
+        }
+
+        stage('Terraform Validate') {
+            steps {
+                sh 'terraform validate && echo "validated terraform code"'
+            }
+        }
+
+        stage('Terraform Plan') {
+            steps {
+                sh 'terraform plan && echo "planning terraform code"'
+            }
+        }
+
+        stage('Terraform Apply') {
+            steps {
+                sh '''
+                    terraform apply --auto-approve
+                    echo "infra created"
+                '''
+            }
+        }
+
+        stage('Store Private IPs') {
+            steps {
+                sh '''
+                ./store_ip.sh
+                
+                '''
+            }
+        }
+
+        stage('Git Checkout - Ansible Repo') {
             steps {
                 checkout([$class: 'GitSCM',
-                          branches: [[name: '*/postgres']],
-                          doGenerateSubmoduleConfigurations: false,
-                          extensions: [],
-                          userRemoteConfigs: [[url: 'https://github.com/mukeshdevelp/ansible-assignment-5-v2.git', credentialsId: 'github-pat-token']]])
+                    branches: [[name: '*/main']],
+                    doGenerateSubmoduleConfigurations: false,
+                    extensions: [],
+                    userRemoteConfigs: [[
+                        url: 'https://github.com/mukeshdevelp/ansible-assignment-5-v2.git',
+                        credentialsId: 'github-user-password'
+                    ]]
+                ])
             }
         }
-        stage('Install Ansible AWS Plugin') {
-            steps {
-                sh '''
-                    ansible-galaxy collection install amazon.aws
-                '''
-            }
-        }
-        stage('Test Dynamic Inventory') {
-            steps {
-                sh '''
-                echo "Testing dynamic inventory..."
-                ansible-inventory -i aws_ec2.yml --list
-                '''
-            }
+
        
-        stage('Run Ansible Playbook') {
-            steps {
-                sh '''
-                ansible-playbook -i aws_ec2.yml ansible/playbook.yml
-                '''
-            }
-        }
-    }
-    post {
-        success { echo "Stage 1 & 2 completed successfully: repo checked out and infra provisioned." }
-        failure { echo "Pipeline failed. Check console output for errors." }
+        stage('Setup Virtualenv & Install Ansible dependencies') {
+    steps {
+        sh '''
+            python3 -m venv $VENV_PATH
+            . $VENV_PATH/bin/activate
+            echo "Virtual environment activated at $VIRTUAL_ENV"
+            
+            pip install --upgrade pip
+            pip install boto3 botocore ansible
+
+            # Ansible collection
+            ansible-galaxy collection install amazon.aws
+
+            echo "Dependencies installed successfully"
+        '''
     }
 }
 
+        
+        stage('Run Ansible') {
+            steps {
+                withEnv(["PATH=${env.WORKSPACE}/venv/bin:${env.PATH}"]) {
+                sh '''
+                    ansible-inventory -i aws_ec2.yml --list
+                    ansible-playbook -i aws_ec2.yml site.yml
+                '''
+            }
+
+            }
+        }
+        
+
+    } // end stages
+
+    post {
+        success {
+            echo "Pipeline completed successfully: Infra created + Ansible executed."
+        }
+        failure {
+            echo "Pipeline failed. Check console output for errors."
+        }
+    }
+
+} // end pipeline
