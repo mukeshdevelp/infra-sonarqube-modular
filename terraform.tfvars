@@ -40,4 +40,4 @@ min_number     = 0
 alb_listener = []
 
 existing_vpc_id = "vpc-00f02dc789ed26995"
-new_vpc_id = ""
+new_vpc_id      = ""

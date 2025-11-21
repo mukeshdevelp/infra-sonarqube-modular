@@ -21,9 +21,7 @@ variable "accepter_vpc_cidr" {
   type        = string
 }
 
-variable "peer_region" {
-  type        = string
-}
+
 
 variable "auto_accept" {
   type    = bool

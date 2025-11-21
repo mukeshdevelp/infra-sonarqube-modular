@@ -119,7 +119,7 @@ variable "alb_listener" {
 variable "existing_vpc_id" {
   type        = string
   description = "Existing VPC ID for 173.0.0.0/16"
-  
+
 }
 
 variable "new_vpc_id" {
