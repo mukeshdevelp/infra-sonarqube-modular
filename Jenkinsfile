@@ -57,10 +57,12 @@ pipeline {
         // copy the ssh key to ec2 server
         stage('copy ssh key to ec2 server') {
             steps {
-                sh 'scp -o StrictHostKeyChecking=no -i ${SSH_KEY_PATH} ${SSH_KEY_PATH} ubuntu@$(cat private_ip.txt):~/.ssh/sonarqube-key.pem'
+                sh 'scp -o StrictHostKeyChecking=no -i ./.ssh/sonarqube-key.pem ./.ssh/sonarqube-key.pem ubuntu@:public-ip/home/ubuntu/'
+
                 
             }
         }
+
         stage('Test Dynamic Inventory') {
             steps {
                 sh '''
@@ -69,11 +71,19 @@ pipeline {
                 '''
             }
         }
-
+        stage('Git Checkout') {
+            steps {
+                checkout([$class: 'GitSCM',
+                          branches: [[name: '*/postgres']],
+                          doGenerateSubmoduleConfigurations: false,
+                          extensions: [],
+                          userRemoteConfigs: [[url: 'https://github.com/mukeshdevelp/ansible-assignment-5-v2.git', credentialsId: 'github-pat-token']]])
+            }
+        }
         stage('Run Ansible Playbook') {
             steps {
                 sh '''
-                ansible-playbook -i inventory/aws_ec2.yml ansible/playbook.yml
+                ansible-playbook -i aws_ec2.yml ansible/playbook.yml
                 '''
             }
         }
