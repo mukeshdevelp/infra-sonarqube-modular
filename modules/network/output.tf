@@ -11,3 +11,6 @@ output "internet_gw_attachment_vpc" {
 output "nat_gw_attatchment" {
   value = aws_nat_gateway.nat_gw.subnet_id
 }
+output "private_rt_id" {
+  value = aws_route_table.private_rt.id
+}

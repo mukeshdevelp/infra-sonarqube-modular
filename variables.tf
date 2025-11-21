@@ -115,6 +115,27 @@ variable "alb_listener" {
   type        = list(string)
 }
 
+
+variable "existing_vpc_id" {
+  type        = string
+  description = "Existing VPC ID for 173.0.0.0/16"
+}
+
+variable "new_vpc_id" {
+  type        = string
+  description = "New VPC ID for 10.0.0.0/16"
+}
+
+variable "existing_route_table_ids" {
+  type        = list(string)
+  description = "Route tables of existing VPC (173/16)"
+}
+
+variable "new_route_table_ids" {
+  type        = list(string)
+  description = "Private route tables of new VPC (10/16)"
+}
+
 #------------------
 # gonna see after
 

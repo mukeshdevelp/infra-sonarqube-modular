@@ -9,3 +9,6 @@ output "public_subnets" {
 output "private_subnets" {
   value = [aws_subnet.private_a.id, aws_subnet.private_b.id]
 }
+output "vpc_cidr_block" {
+  value = aws_vpc.sonarqube_vpc.cidr_block
+}
