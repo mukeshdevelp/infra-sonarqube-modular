@@ -41,11 +41,7 @@ pipeline {
         stage('Terraform Plan') {
             steps { sh 'terraform plan && echo "planning terraform code"' }
         }
-        stage('terraform refresh'){
-            steps{
-                sh 'terraform refresh'
-            }
-        }
+        
         stage('Terraform apply') {
             steps { sh 'terraform destroy --auto-approve && echo "creating infra"' }
         }
@@ -54,23 +50,7 @@ pipeline {
              sh "./store_ip.sh"
          }
     }   
-        // copy the ssh key to ec2 server
-        stage('copy ssh key to ec2 server') {
-            steps {
-                sh 'scp -o StrictHostKeyChecking=no -i ./.ssh/sonarqube-key.pem ./.ssh/sonarqube-key.pem ubuntu@:public-ip/home/ubuntu/'
-
-                
-            }
-        }
-
-        stage('Test Dynamic Inventory') {
-            steps {
-                sh '''
-                echo "Testing dynamic inventory..."
-                ansible-inventory -i aws_ec2.yml --list
-                '''
-            }
-        }
+         }
         stage('Git Checkout') {
             steps {
                 checkout([$class: 'GitSCM',
@@ -80,6 +60,21 @@ pipeline {
                           userRemoteConfigs: [[url: 'https://github.com/mukeshdevelp/ansible-assignment-5-v2.git', credentialsId: 'github-pat-token']]])
             }
         }
+        stage('Install Ansible AWS Plugin') {
+            steps {
+                sh '''
+                    ansible-galaxy collection install amazon.aws
+                '''
+            }
+        }
+        stage('Test Dynamic Inventory') {
+            steps {
+                sh '''
+                echo "Testing dynamic inventory..."
+                ansible-inventory -i aws_ec2.yml --list
+                '''
+            }
+       
         stage('Run Ansible Playbook') {
             steps {
                 sh '''
@@ -93,3 +88,4 @@ pipeline {
         failure { echo "Pipeline failed. Check console output for errors." }
     }
 }
+
