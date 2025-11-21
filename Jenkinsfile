@@ -77,7 +77,14 @@ pipeline {
                 '''
             }
         }
-
+        stage('Get ALB DNS and save to file') {
+            steps {
+                sh '''
+                    terraform output -raw alb_dns_name > alb_dns.txt
+                    echo "ALB DNS saved to alb_dns.txt"
+                '''
+            }
+        }
         stage('Git Checkout - Ansible Repo') {
             steps {
                 checkout([$class: 'GitSCM',
