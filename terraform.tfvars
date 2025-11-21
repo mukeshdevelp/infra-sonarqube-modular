@@ -28,7 +28,7 @@ all_hosts        = ["0.0.0.0/0"]
 # ec2 compute different owners and ami s
 #owners_of_image = ["099720109477"]
 instance_size_small             = "t2.micro"
-instance_size_big_for_sonarqube = "t3.medium"
+instance_size_big_for_sonarqube = "t3.large"
 
 private_sec_group = []
 
