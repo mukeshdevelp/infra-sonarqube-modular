@@ -7,9 +7,9 @@ terraform {
       version = "~> 6.0"
     }
   }
-/*
+
   backend "s3" {
-    bucket = "sonarqube-terraform-state-1"
+    bucket = "sonarqube-terraform-state-12"
 
     key     = "terraform.tfstate"
     region  = "eu-central-1"
@@ -19,6 +19,6 @@ terraform {
 
     use_lockfile = true
   }
-*/
+
 
 }
