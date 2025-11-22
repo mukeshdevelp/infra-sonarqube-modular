@@ -38,6 +38,10 @@ module "security" {
   pub_subnet_b_association = module.vpc.public_subnets[1]
   pri_subnet_a_association = module.vpc.private_subnets[0]
   pri_subnet_b_association = module.vpc.private_subnets[1]
+  vpc_cidr_block           = module.vpc.vpc_cidr_block
+  public_subnet_a_cidr     = var.public_subnet_a_cidr_block
+  public_subnet_b_cidr     = var.public_subnet_b_cidr_block
+  peered_vpc_cidr          = var.peered_vpc_cidr
 
 }
 
@@ -52,7 +56,7 @@ module "compute" {
   source          = "./modules/compute"
   private_subnets = module.vpc.private_subnets
 
-  private_sg = [module.security.private_sg_id, module.security.postgres_sg_id]
+  private_sg = [module.security.private_sg_id]
 
   target_group_arn = module.alb.target_group_arn
 
@@ -62,9 +66,10 @@ module "compute" {
 
   key_name = module.keypair.key_name
 
+  small_instance_size     = var.instance_size_small
   sonarqube_instance_size = var.instance_size_big_for_sonarqube
 
-  # for asg
+  # ASG variables (not currently used but kept for future use)
   desired_number = var.desired_number
   max_number     = var.max_number
   min_number     = var.min_number
@@ -79,9 +84,10 @@ module "alb" {
 
 }
 
+
 data "aws_vpc" "existing_vpc" {
   filter {
-    name   = "tag:Name"
+    name = "tag:Name"
     values = ["project-vpc"]
   }
 }
@@ -99,7 +105,7 @@ module "vpc_peering" {
 
 
   requester_vpc_id   = data.aws_vpc.existing_vpc.id
-  requester_vpc_cidr = "173.0.0.0/16"
+  requester_vpc_cidr = var.peered_vpc_cidr
 
   requester_route_tables = data.aws_route_tables.existing_vpc_rts.ids
 
@@ -166,7 +172,7 @@ provider "aws" {
 # VPC
 
 resource "aws_vpc" "sonarqube_vpc" {
-  cidr_block           = "10.0.0.0/16"
+  cidr_block           = var.vpc_cidr_block
   enable_dns_support   = true
   enable_dns_hostnames = true
   tags = {
@@ -188,7 +194,7 @@ resource "aws_internet_gateway" "igw" {
 
 resource "aws_subnet" "public_subnet_a" {
   vpc_id                  = aws_vpc.sonarqube_vpc.id
-  cidr_block              = "10.0.1.0/24"
+  cidr_block              = var.public_subnet_a_cidr_block
   availability_zone       = "us-east-1a"
   map_public_ip_on_launch = true
   tags = {
@@ -198,7 +204,7 @@ resource "aws_subnet" "public_subnet_a" {
 
 resource "aws_subnet" "public_subnet_b" {
   vpc_id                  = aws_vpc.sonarqube_vpc.id
-  cidr_block              = "10.0.2.0/24"
+  cidr_block              = var.public_subnet_b_cidr_block
   availability_zone       = "us-east-1b"
   map_public_ip_on_launch = true
   tags = {
@@ -208,7 +214,7 @@ resource "aws_subnet" "public_subnet_b" {
 
 resource "aws_subnet" "private_subnet_a" {
   vpc_id            = aws_vpc.sonarqube_vpc.id
-  cidr_block        = "10.0.3.0/24"
+  cidr_block        = var.private_subnet_a_cidr_block
   availability_zone = "us-east-1a"
   tags = {
     Name = "private-subnet-a"
@@ -217,7 +223,7 @@ resource "aws_subnet" "private_subnet_a" {
 
 resource "aws_subnet" "private_subnet_b" {
   vpc_id            = aws_vpc.sonarqube_vpc.id
-  cidr_block        = "10.0.4.0/24"
+  cidr_block        = var.private_subnet_b_cidr_block
   availability_zone = "us-east-1b"
   tags = {
     Name = "private-subnet-b"
@@ -412,7 +418,7 @@ resource "aws_network_acl" "private_nacl" {
     protocol   = "-1"
     rule_no    = 100
     action     = "allow"
-    cidr_block = "10.0.0.0/16"
+    cidr_block = var.vpc_cidr_block
     from_port  = 0
     to_port    = 0
   }

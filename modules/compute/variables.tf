@@ -1,23 +1,31 @@
 variable "private_subnets" {
-
+  description = "List of private subnet IDs"
+  type        = list(string)
 }
+
 variable "public_security_group" {
+  description = "Public security group ID for bastion host"
+  type        = string
+}
 
-}
 variable "target_group_arn" {
-  
+  description = "ALB target group ARN"
+  type        = string
 }
+
 variable "key_name" {
-    description = "ec2 private key name"
-    type = string
+  description = "EC2 private key name"
+  type        = string
 }
-variable public_subnet_a_id{
-    description = "private subnet a id"
-    type = string
+
+variable "public_subnet_a_id" {
+  description = "Public subnet A ID for bastion host"
+  type        = string
 }
-variable private_sg{
-    description = "private security groups id"
-    type = list(string)
+
+variable "private_sg" {
+  description = "Private security groups ID list"
+  type        = list(string)
 }
 
 
@@ -50,6 +58,8 @@ variable "min_number" {
 }
 
 variable "alb_listener" {
-  description = "listenner for alb"
+  description = "ALB listener (for dependencies)"
+  type        = any
+  default     = []
 }
  

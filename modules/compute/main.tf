@@ -27,46 +27,60 @@ resource "aws_instance" "public_ec2" {
 }
 
 
-# launch template
-resource "aws_launch_template" "lt" {
+# Launch Template for SonarQube instances (can be used with ASG later)
+resource "aws_launch_template" "sonarqube_lt" {
   name_prefix            = "sonarqube-lt-"
   image_id               = data.aws_ami.ubuntu.id
   instance_type          = var.sonarqube_instance_size
   key_name               = var.key_name
   vpc_security_group_ids = var.private_sg
-  
+
+  tag_specifications {
+    resource_type = "instance"
+    tags = {
+      Name = "sonarqube-instance"
+      env  = "sonarqube"
+      role = "sonarqube"
+    }
+  }
+}
+
+# Direct EC2 instances for Ansible installation
+# Each instance will run BOTH SonarQube (port 9000) and PostgreSQL (port 5432) on the same server
+# Jenkins pipeline will install both services via Ansible roles
+#
+# Instance Placement:
+# - private_server_a → Private Subnet 1a (us-east-1a, 10.0.3.0/24)
+# - private_server_b → Private Subnet 1b (us-east-1b, 10.0.4.0/24)
+resource "aws_instance" "private_server_a" {
+  ami                    = data.aws_ami.ubuntu.id
+  instance_type          = var.sonarqube_instance_size
+  subnet_id              = var.private_subnets[0]  # Private Subnet 1a (10.0.3.0/24)
+  vpc_security_group_ids = var.private_sg
+  key_name               = var.key_name
+
   tags = {
     Name = "private-server-1a"
-    az = "1a"
+    az   = "1a"
+    env  = "sonarqube"
+    role = "sonarqube-postgres"  # Both services on same instance
+    subnet = "private-subnet-1a"
   }
 }
 
 resource "aws_instance" "private_server_b" {
-  ami           = data.aws_ami.ubuntu.id
-  instance_type = "t3.large"
-  subnet_id     = var.private_subnets[1]
-  
+  ami                    = data.aws_ami.ubuntu.id
+  instance_type          = var.sonarqube_instance_size
+  subnet_id              = var.private_subnets[1]  # Private Subnet 1b (10.0.4.0/24)
   vpc_security_group_ids = var.private_sg
-  key_name = var.key_name
-  
+  key_name               = var.key_name
+
   tags = {
     Name = "private-server-1b"
-    az = "1b"
-    env = "sonarqube"
-  }
-}
-resource "aws_instance" "private_server_a" {
-  ami           = data.aws_ami.ubuntu.id
-  instance_type = "t3.large"
-  subnet_id     = var.private_subnets[0]
-  
-  vpc_security_group_ids = var.private_sg
-  key_name = var.key_name
- 
-  tags = {
-    Name = "private-server-1a"
-    az = "1a"
-    env = "sonarqube"
+    az   = "1b"
+    env  = "sonarqube"
+    role = "sonarqube-postgres"  # Both services on same instance
+    subnet = "private-subnet-1b"
   }
 }
 # Attach private instances to ALB target group (SonarQube listens on port 9000)
@@ -81,24 +95,8 @@ resource "aws_lb_target_group_attachment" "private_b_attachment" {
   target_id        = aws_instance.private_server_b.id
   port             = 9000
 }
-# Launch Template (SonarQube EC2)
-
-resource "aws_launch_template" "sonarqube_lt" {
-  name                   = "sonarqube-lt-"
-  image_id               = data.aws_ami.ubuntu.id
-  instance_type          = "t3.large"
-  key_name               = var.key_name
-  vpc_security_group_ids = [ var.public_security_group]
-  # remove this block at last...before creating in
-  # Ensure user data is properly base64 encoded using base64encode()
-  
-  tags = {
-    launch_template = "sonarqube-launch-template"
-    situated_in = "private subnet"
-    sec_grp = "private and postgres"
-  }
-  
-}
+# Launch template is available above for future ASG use
+# Direct instances are used for Ansible installation via Jenkins pipeline
 /*
 # auto scaling group
 resource "aws_autoscaling_group" "asg" {

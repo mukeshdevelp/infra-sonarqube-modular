@@ -116,6 +116,11 @@ variable "alb_listener" {
 }
 
 
+variable "peered_vpc_cidr" {
+  type        = string
+  description = "CIDR block of the peered VPC (e.g., 173.0.0.0/16)"
+}
+
 variable "existing_vpc_id" {
   type        = string
   description = "Existing VPC ID for 173.0.0.0/16"

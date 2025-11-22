@@ -4,12 +4,13 @@ variable "vpc_id" {
 }
 
 variable "allowed_host" {
-  description = "allowed or whitelisted ips for ssh"
-  type = list(string)
+  description = "Allowed or whitelisted IPs for SSH"
+  type        = list(string)
 }
+
 variable "everywhere_host" {
-  description = "allow access to everyone"
-  type = list(string)
+  description = "Allow access to everyone (CIDR blocks)"
+  type        = list(string)
 }
 
 variable "pub_subnet_a_association" {
@@ -29,4 +30,24 @@ variable "pri_subnet_a_association" {
 variable "pri_subnet_b_association" {
   description = "attatching nacl to private b subnet"
   type = string
+}
+
+variable "vpc_cidr_block" {
+  description = "VPC CIDR block (e.g., 10.0.0.0/16)"
+  type        = string
+}
+
+variable "public_subnet_a_cidr" {
+  description = "Public subnet A CIDR block (e.g., 10.0.1.0/24)"
+  type        = string
+}
+
+variable "public_subnet_b_cidr" {
+  description = "Public subnet B CIDR block (e.g., 10.0.2.0/24)"
+  type        = string
+}
+
+variable "peered_vpc_cidr" {
+  description = "Peered VPC CIDR block (e.g., 173.0.0.0/16)"
+  type        = string
 }

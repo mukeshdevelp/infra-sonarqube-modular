@@ -22,7 +22,6 @@ variable "accepter_vpc_cidr" {
 }
 
 
-
 variable "auto_accept" {
   type    = bool
   default = false
