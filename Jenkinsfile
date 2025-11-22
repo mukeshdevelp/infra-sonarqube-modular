@@ -121,9 +121,13 @@ pipeline {
                 sh """
                      ansible-inventory -i aws_ec2.yml --list
                      export ANSIBLE_HOST_KEY_CHECKING=False
-                     ansible -i aws_ec2.yml all -m ping -u ubuntu --private-key=${env.WORKSPACE}/.ssh/sonarqube-key.pem
-
-                    
+                     until ansible -i aws_ec2.yml all -m ping -u ubuntu --private-key=.ssh/sonarqube-key.pem; do
+                      echo "Waiting for hosts to be ready..."
+                      sleep 15
+                    done
+                    ansible-playbook -i aws_ec2.yml -u ubuntu --private-key=${env.WORKSPACE}/.ssh/sonarqube-key.pem site.yml
+    
+                     
                 """
             }
 
