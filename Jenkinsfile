@@ -64,6 +64,8 @@ pipeline {
             steps {
                 sh '''
                     terraform apply --auto-approve
+                    chmod 400 $WORKSPACE/.ssh/sonarqube-key.pem
+
                     echo "infra created"
                 '''
             }
@@ -96,6 +98,7 @@ pipeline {
         stage('Setup Virtualenv & Install Ansible dependencies') {
     steps {
         sh '''
+            
             python3 -m venv $VENV_PATH
             . $VENV_PATH/bin/activate
             echo "Virtual environment activated at $VIRTUAL_ENV"
@@ -115,12 +118,13 @@ pipeline {
         stage('Run Ansible') {
             steps {
                 withEnv(["PATH=${env.WORKSPACE}/venv/bin:${env.PATH}"]) {
-                sh '''
-                    ansible-inventory -i aws_ec2.yml --list
-                    ansible-playbook -i aws_ec2.yml site.yml --private-key=./.ssh/sonarqube-key.pem
+                sh """
+                     ansible-inventory -i aws_ec2.yml --list
+                     export ANSIBLE_HOST_KEY_CHECKING=False
+                     ansible -i aws_ec2.yml all -m ping -u ubuntu --private-key=${env.WORKSPACE}/.ssh/sonarqube-key.pem
 
-
-                '''
+                    
+                """
             }
 
             }
@@ -130,6 +134,7 @@ pipeline {
     } // end stages
 
     post {
+        
         success {
             echo "Pipeline completed successfully: Infra created + Ansible executed."
         }
