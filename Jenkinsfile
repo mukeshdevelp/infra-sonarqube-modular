@@ -76,19 +76,21 @@ pipeline {
                     sh '''
                         terraform apply --auto-approve
                         chmod 400 $WORKSPACE/.ssh/sonarqube-key.pem
-                        
-                        # Copy SSH key to a persistent location before Ansible checkout
-                        mkdir -p /tmp/jenkins-ssh-keys
-                        cp $WORKSPACE/.ssh/sonarqube-key.pem /tmp/jenkins-ssh-keys/sonarqube-key.pem
-                        chmod 400 /tmp/jenkins-ssh-keys/sonarqube-key.pem
-                        
-                        echo "=== Infrastructure Created Successfully ==="
+                        echo "infra created"
                         echo "ALB DNS: $(terraform output -raw alb_dns_name)"
                         echo "Bastion IP: $(terraform output -raw public_ip_of_bastion)"
                         echo "Private Instance IPs:"
                         terraform output -json aws_private_instance_ip | jq -r '.[]'
                     '''
                 }
+            }
+        }
+
+        stage('Store Private IPs') {
+            steps {
+                sh '''
+                    ./store_ip.sh
+                '''
             }
         }
 
@@ -106,90 +108,34 @@ pipeline {
             }
         }
 
-        stage('Copy SSH Key to Ansible Repo') {
+        stage('Setup Virtualenv & Install Ansible dependencies') {
             steps {
                 sh '''
-                    # Copy SSH key from persistent location to Ansible workspace
-                    cp /tmp/jenkins-ssh-keys/sonarqube-key.pem $WORKSPACE/sonarqube-key.pem
-                    chmod 400 $WORKSPACE/sonarqube-key.pem
-                    echo "SSH key copied to Ansible workspace"
+                    python3 -m venv $VENV_PATH
+                    . $VENV_PATH/bin/activate
+                    echo "Virtual environment activated at $VIRTUAL_ENV"
+                    
+                    pip install --upgrade pip
+                    pip install boto3 botocore ansible
+                    # Ansible collection
+                    ansible-galaxy collection install amazon.aws
+                    echo "Dependencies installed successfully"
                 '''
             }
         }
 
-       
-        stage('Setup Virtualenv & Install Ansible dependencies') {
-    steps {
-        sh '''
-            
-            python3 -m venv $VENV_PATH
-            . $VENV_PATH/bin/activate
-            echo "Virtual environment activated at $VIRTUAL_ENV"
-            
-            pip install --upgrade pip
-            pip install boto3 botocore ansible
-
-            # Ansible collection
-            ansible-galaxy collection install amazon.aws
-
-            echo "Dependencies installed successfully"
-        '''
-    }
-}
-
-        
         stage('Run Ansible') {
             steps {
-                withCredentials([[$class: '                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 ',
-                    credentialsId: 'aws-credentials',
-                    accessKeyVariable: 'AWS_ACCESS_KEY_ID',
-                    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
-                ]]) {
-                    withEnv(["PATH=${env.WORKSPACE}/venv/bin:${env.PATH}"]) {
-                        sh """
-                            export ANSIBLE_HOST_KEY_CHECKING=False
-                            export AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
-                            export AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-                            
-                            echo "=== Waiting for EC2 instances to be ready ==="
-                            MAX_RETRIES=20
-                            RETRY_COUNT=0
-                            
-                            until ansible-inventory -i aws_ec2.yml --list | grep -q "_sonarqube" || [ \$RETRY_COUNT -ge \$MAX_RETRIES ]; do
-                                echo "Attempt \$((RETRY_COUNT + 1))/\$MAX_RETRIES: Waiting for instances to appear in inventory..."
-                                sleep 30
-                                RETRY_COUNT=\$((RETRY_COUNT + 1))
-                            done
-                            
-                            if [ \$RETRY_COUNT -ge \$MAX_RETRIES ]; then
-                                echo "ERROR: Instances did not appear in inventory after \$MAX_RETRIES attempts"
-                                exit 1
-                            fi
-                            
-                            echo "=== Testing connectivity to instances ==="
-                            until ansible -i aws_ec2.yml _sonarqube -m ping -u ubuntu --private-key=sonarqube-key.pem || [ \$RETRY_COUNT -ge \$MAX_RETRIES ]; do
-                                echo "Attempt \$((RETRY_COUNT + 1))/\$MAX_RETRIES: Waiting for SSH connectivity..."
-                                sleep 30
-                                RETRY_COUNT=\$((RETRY_COUNT + 1))
-                            done
-                            
-                            if [ \$RETRY_COUNT -ge \$MAX_RETRIES ]; then
-                                echo "ERROR: Could not establish SSH connectivity after \$MAX_RETRIES attempts"
-                                exit 1
-                            fi
-                            
-                            echo "=== Running Ansible Playbook ==="
-                            ansible-playbook -i aws_ec2.yml -u ubuntu --private-key=sonarqube-key.pem site.yml
-                            
-                            if [ \$? -eq 0 ]; then
-                                echo "=== Ansible Playbook Completed Successfully ==="
-                            else
-                                echo "ERROR: Ansible Playbook failed"
-                                exit 1
-                            fi
-                        """
-                    }
-                }
+                withEnv(["PATH=${env.WORKSPACE}/venv/bin:${env.PATH}"]) {
+                sh '''
+                    ansible-inventory -i aws_ec2.yml --list
+                    ansible -i aws_ec2.yml _sonarqube -u ubuntu --private-key=${WORKSPACE}/.ssh/sonarqube-key.pem
+                    ansible-playbook -i aws_ec2.yml site.yml --private-key=./.ssh/sonarqube-key.pem
+
+
+                '''
+            }
+
             }
         }
         
@@ -201,7 +147,7 @@ pipeline {
             script {
                 try {
                     def albDns = sh(
-                        script: 'cd $WORKSPACE && terraform output -raw alb_dns_name 2>/dev/null || echo "N/A"',
+                        script: 'terraform output -raw alb_dns_name 2>/dev/null || echo "N/A"',
                         returnStdout: true
                     ).trim()
                     echo "=========================================="
