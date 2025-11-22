@@ -100,39 +100,33 @@ data "aws_route_tables" "existing_vpc_rts" {
 module "vpc_peering" {
   source = "./modules/peering"
 
-
   # REQUESTER → EXISTING VPC (173.0.0.0/16)
-
-
   requester_vpc_id   = data.aws_vpc.existing_vpc.id
   requester_vpc_cidr = var.peered_vpc_cidr
-
   requester_route_tables = data.aws_route_tables.existing_vpc_rts.ids
-
 
   #########################################
   # ACCEPTER → NEW VPC (10.0.0.0/16)
   #########################################
-
   accepter_vpc_id   = module.vpc.vpc_id         # <-- Your newly created VPC
   accepter_vpc_cidr = module.vpc.vpc_cidr_block # usually 10.0.0.0/16
-
   accepter_route_tables = [module.network.private_rt_id]
-  # OR hardcode:
-  # accepter_route_tables = ["rtb-yyyyyyy"]
 
   #########################################
   # META CONFIG
   #########################################
-
   name        = "peering-173-to-10"
-  #peer_region = "us-east-1"
   auto_accept = true
 
   tags = {
     Project = "sonarqube-deployment"
     Owner   = "Mukesh"
   }
+  
+  # Ensure network module (including NAT Gateway and private route table) is created first
+  # This ensures the private route table has the 0.0.0.0/0 → NAT Gateway route
+  # before the peering route (173.0.0.0/16 → peering) is added
+  depends_on = [module.network]
 }
 
 

@@ -388,6 +388,25 @@ resource "aws_network_acl" "private_nacl" {
     from_port  = 5432
     to_port    = 5432
   }
+  # Ephemeral ports ingress from internet (for return traffic from outbound HTTPS/HTTP connections)
+  # This is required for apt update to work - NACLs are stateless
+  ingress {
+    protocol   = "tcp"
+    rule_no    = 140
+    action     = "allow"
+    cidr_block = "0.0.0.0/0"
+    from_port  = 1024
+    to_port    = 65535
+  }
+  # UDP ephemeral ports ingress (for DNS responses)
+  ingress {
+    protocol   = "udp"
+    rule_no    = 141
+    action     = "allow"
+    cidr_block = "0.0.0.0/0"
+    from_port  = 1024
+    to_port    = 65535
+  }
   # all allow egress
   egress {
     protocol   = "-1"

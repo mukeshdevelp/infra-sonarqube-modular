@@ -56,27 +56,34 @@ pipeline {
 
         stage('Terraform Plan') {
             steps {
-                sh 'terraform plan && echo "planning terraform code"'
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws-credentials',
+                    accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                ]]) {
+                    sh 'terraform plan && echo "planning terraform code"'
+                }
             }
         }
 
         stage('Terraform Apply') {
             steps {
-                sh '''
-                    terraform apply --auto-approve
-                    chmod 400 $WORKSPACE/.ssh/sonarqube-key.pem
-
-                    echo "infra created"
-                '''
-            }
-        }
-
-        stage('Store Private IPs') {
-            steps {
-                sh '''
-                ./store_ip.sh
-                
-                '''
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws-credentials',
+                    accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                ]]) {
+                    sh '''
+                        terraform apply --auto-approve
+                        chmod 400 $WORKSPACE/.ssh/sonarqube-key.pem
+                        
+                        echo "=== Infrastructure Created Successfully ==="
+                        echo "ALB DNS: $(terraform output -raw alb_dns_name)"
+                        echo "Bastion IP: $(terraform output -raw public_ip_of_bastion)"
+                        echo "Private Instance IPs:"
+                        terraform output -json aws_private_instance_ip | jq -r '.[]'
+                    '''
+                }
             }
         }
 
@@ -91,6 +98,17 @@ pipeline {
                         credentialsId: 'github-user-password'
                     ]]
                 ])
+            }
+        }
+
+        stage('Copy SSH Key to Ansible Repo') {
+            steps {
+                sh '''
+                    # Copy SSH key from Terraform repo to Ansible repo
+                    cp $WORKSPACE/.ssh/sonarqube-key.pem $WORKSPACE/sonarqube-key.pem
+                    chmod 400 $WORKSPACE/sonarqube-key.pem
+                    echo "SSH key copied to Ansible workspace"
+                '''
             }
         }
 
@@ -117,20 +135,56 @@ pipeline {
         
         stage('Run Ansible') {
             steps {
-                withEnv(["PATH=${env.WORKSPACE}/venv/bin:${env.PATH}"]) {
-                sh """
-                     ansible-inventory -i aws_ec2.yml --list
-                     export ANSIBLE_HOST_KEY_CHECKING=False
-                     until ansible -i aws_ec2.yml all -m ping -u ubuntu --private-key=.ssh/sonarqube-key.pem; do
-                      echo "Waiting for hosts to be ready..."
-                      sleep 15
-                    done
-                    ansible-playbook -i aws_ec2.yml -u ubuntu --private-key=${env.WORKSPACE}/.ssh/sonarqube-key.pem site.yml
-    
-                     
-                """
-            }
-
+                withCredentials([[$class: '                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 ',
+                    credentialsId: 'aws-credentials',
+                    accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                ]]) {
+                    withEnv(["PATH=${env.WORKSPACE}/venv/bin:${env.PATH}"]) {
+                        sh """
+                            export ANSIBLE_HOST_KEY_CHECKING=False
+                            export AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+                            export AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+                            
+                            echo "=== Waiting for EC2 instances to be ready ==="
+                            MAX_RETRIES=20
+                            RETRY_COUNT=0
+                            
+                            until ansible-inventory -i aws_ec2.yml --list | grep -q "_sonarqube" || [ \$RETRY_COUNT -ge \$MAX_RETRIES ]; do
+                                echo "Attempt \$((RETRY_COUNT + 1))/\$MAX_RETRIES: Waiting for instances to appear in inventory..."
+                                sleep 30
+                                RETRY_COUNT=\$((RETRY_COUNT + 1))
+                            done
+                            
+                            if [ \$RETRY_COUNT -ge \$MAX_RETRIES ]; then
+                                echo "ERROR: Instances did not appear in inventory after \$MAX_RETRIES attempts"
+                                exit 1
+                            fi
+                            
+                            echo "=== Testing connectivity to instances ==="
+                            until ansible -i aws_ec2.yml _sonarqube -m ping -u ubuntu --private-key=sonarqube-key.pem || [ \$RETRY_COUNT -ge \$MAX_RETRIES ]; do
+                                echo "Attempt \$((RETRY_COUNT + 1))/\$MAX_RETRIES: Waiting for SSH connectivity..."
+                                sleep 30
+                                RETRY_COUNT=\$((RETRY_COUNT + 1))
+                            done
+                            
+                            if [ \$RETRY_COUNT -ge \$MAX_RETRIES ]; then
+                                echo "ERROR: Could not establish SSH connectivity after \$MAX_RETRIES attempts"
+                                exit 1
+                            fi
+                            
+                            echo "=== Running Ansible Playbook ==="
+                            ansible-playbook -i aws_ec2.yml -u ubuntu --private-key=sonarqube-key.pem site.yml
+                            
+                            if [ \$? -eq 0 ]; then
+                                echo "=== Ansible Playbook Completed Successfully ==="
+                            else
+                                echo "ERROR: Ansible Playbook failed"
+                                exit 1
+                            fi
+                        """
+                    }
+                }
             }
         }
         
@@ -138,12 +192,37 @@ pipeline {
     } // end stages
 
     post {
-        
+        always {
+            script {
+                try {
+                    def albDns = sh(
+                        script: 'cd $WORKSPACE && terraform output -raw alb_dns_name 2>/dev/null || echo "N/A"',
+                        returnStdout: true
+                    ).trim()
+                    echo "=========================================="
+                    echo "Pipeline Execution Summary"
+                    echo "=========================================="
+                    if (albDns != "N/A" && albDns != "") {
+                        echo "✓ SonarQube ALB DNS: http://${albDns}"
+                    }
+                    echo "=========================================="
+                } catch (Exception e) {
+                    echo "Could not retrieve ALB DNS: ${e.getMessage()}"
+                }
+            }
+        }
         success {
-            echo "Pipeline completed successfully: Infra created + Ansible executed."
+            echo "=========================================="
+            echo "✓ Pipeline completed successfully!"
+            echo "✓ Infrastructure created"
+            echo "✓ Ansible playbook executed"
+            echo "=========================================="
         }
         failure {
-            echo "Pipeline failed. Check console output for errors."
+            echo "=========================================="
+            echo "✗ Pipeline failed!"
+            echo "Check console output above for errors"
+            echo "=========================================="
         }
     }
 
