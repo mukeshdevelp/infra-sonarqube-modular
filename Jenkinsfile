@@ -77,14 +77,7 @@ pipeline {
                 '''
             }
         }
-        stage('Get ALB DNS and save to file') {
-            steps {
-                sh '''
-                    terraform output -raw alb_dns_name > alb_dns.txt
-                    echo "ALB DNS saved to alb_dns.txt"
-                '''
-            }
-        }
+
         stage('Git Checkout - Ansible Repo') {
             steps {
                 checkout([$class: 'GitSCM',
@@ -124,7 +117,9 @@ pipeline {
                 withEnv(["PATH=${env.WORKSPACE}/venv/bin:${env.PATH}"]) {
                 sh '''
                     ansible-inventory -i aws_ec2.yml --list
-                    ansible-playbook -i aws_ec2.yml site.yml
+                    ansible-playbook -i aws_ec2.yml site.yml --private-key=./.ssh/sonarqube-key.pem
+
+
                 '''
             }
 
