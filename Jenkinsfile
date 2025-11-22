@@ -77,6 +77,11 @@ pipeline {
                         terraform apply --auto-approve
                         chmod 400 $WORKSPACE/.ssh/sonarqube-key.pem
                         
+                        # Copy SSH key to a persistent location before Ansible checkout
+                        mkdir -p /tmp/jenkins-ssh-keys
+                        cp $WORKSPACE/.ssh/sonarqube-key.pem /tmp/jenkins-ssh-keys/sonarqube-key.pem
+                        chmod 400 /tmp/jenkins-ssh-keys/sonarqube-key.pem
+                        
                         echo "=== Infrastructure Created Successfully ==="
                         echo "ALB DNS: $(terraform output -raw alb_dns_name)"
                         echo "Bastion IP: $(terraform output -raw public_ip_of_bastion)"
@@ -104,8 +109,8 @@ pipeline {
         stage('Copy SSH Key to Ansible Repo') {
             steps {
                 sh '''
-                    # Copy SSH key from Terraform repo to Ansible repo
-                    cp $WORKSPACE/.ssh/sonarqube-key.pem $WORKSPACE/sonarqube-key.pem
+                    # Copy SSH key from persistent location to Ansible workspace
+                    cp /tmp/jenkins-ssh-keys/sonarqube-key.pem $WORKSPACE/sonarqube-key.pem
                     chmod 400 $WORKSPACE/sonarqube-key.pem
                     echo "SSH key copied to Ansible workspace"
                 '''
