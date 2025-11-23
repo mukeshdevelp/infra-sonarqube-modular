@@ -165,18 +165,13 @@
                                 while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
                                     if ansible-inventory -i aws_ec2.yml --list 2>/dev/null | grep -q "_image_builder"; then
                                         echo "✅ Image Builder EC2 found in dynamic inventory"
-                                        # Get the IP from inventory (using simpler method to avoid Groovy escaping issues)
-                                        IMAGE_BUILDER_IP=$(ansible-inventory -i aws_ec2.yml --list 2>/dev/null | grep -A 20 "_image_builder" | grep "ansible_host" | head -1 | sed 's/.*"ansible_host": *"\([^"]*\)".*/\1/' || echo "")
+                                        # Get the IP from inventory - use simple method without regex
+                                        IMAGE_BUILDER_IP=$(ansible-inventory -i aws_ec2.yml --host _image_builder 2>/dev/null | grep ansible_host | awk '{print $2}' | tr -d '"' || echo "")
                                         if [ -z "$IMAGE_BUILDER_IP" ]; then
-                                            # Try to get from hostvars
-                                            IMAGE_BUILDER_IP=$(ansible-inventory -i aws_ec2.yml --host _image_builder 2>/dev/null | grep ansible_host | awk '{print $2}' | tr -d '"' || echo "")
-                                        fi
-                                        if [ -z "$IMAGE_BUILDER_IP" ]; then
-                                            # Try using jq if available
-                                            IMAGE_BUILDER_IP=$(ansible-inventory -i aws_ec2.yml --list 2>/dev/null | jq -r '._image_builder.hosts[0] // empty' 2>/dev/null || echo "")
-                                            if [ -n "$IMAGE_BUILDER_IP" ]; then
-                                                # Get ansible_host for this IP
-                                                IMAGE_BUILDER_IP=$(ansible-inventory -i aws_ec2.yml --host "$IMAGE_BUILDER_IP" 2>/dev/null | grep ansible_host | awk '{print $2}' | tr -d '"' || echo "")
+                                            # Fallback: get first host from _image_builder group
+                                            FIRST_HOST=$(ansible-inventory -i aws_ec2.yml --list 2>/dev/null | grep -A 5 "_image_builder" | grep -v "_image_builder" | head -1 | tr -d ' ":,' || echo "")
+                                            if [ -n "$FIRST_HOST" ]; then
+                                                IMAGE_BUILDER_IP=$(ansible-inventory -i aws_ec2.yml --host "$FIRST_HOST" 2>/dev/null | grep ansible_host | awk '{print $2}' | tr -d '"' || echo "")
                                             fi
                                         fi
                                         if [ -n "$IMAGE_BUILDER_IP" ]; then
