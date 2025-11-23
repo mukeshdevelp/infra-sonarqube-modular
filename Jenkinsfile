@@ -155,36 +155,88 @@
                                 echo "=== Waiting for Image Builder EC2 to be discovered ==="
                                 MAX_RETRIES=30
                                 RETRY_COUNT=0
+                                IMAGE_BUILDER_IP=""
+                                
                                 while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
                                     if ansible-inventory -i aws_ec2.yml --list 2>/dev/null | grep -q "_image_builder"; then
                                         echo "✅ Image Builder EC2 found in dynamic inventory"
-                                        break
+                                        # Get the IP from inventory
+                                        IMAGE_BUILDER_IP=$(ansible-inventory -i aws_ec2.yml --list 2>/dev/null | grep -A 10 "_image_builder" | grep -oP '"ansible_host":\s*"[\d.]+"' | head -1 | grep -oP '\d+\.\d+\.\d+\.\d+' || echo "")
+                                        if [ -z "$IMAGE_BUILDER_IP" ]; then
+                                            # Try to get from hostvars
+                                            IMAGE_BUILDER_IP=$(ansible-inventory -i aws_ec2.yml --host _image_builder 2>/dev/null | grep ansible_host | awk '{print $2}' | tr -d '"' || echo "")
+                                        fi
+                                        if [ -n "$IMAGE_BUILDER_IP" ]; then
+                                            echo "Image Builder EC2 IP: $IMAGE_BUILDER_IP"
+                                            break
+                                        fi
                                     fi
                                     echo "Waiting for Image Builder EC2... ($RETRY_COUNT/$MAX_RETRIES)"
                                     sleep 10
                                     RETRY_COUNT=$((RETRY_COUNT + 1))
                                 done
                                 
+                                if [ -z "$IMAGE_BUILDER_IP" ]; then
+                                    echo "❌ ERROR: Could not get Image Builder EC2 IP from inventory"
+                                    echo "=== Full inventory output ==="
+                                    ansible-inventory -i aws_ec2.yml --list
+                                    exit 1
+                                fi
+                                
                                 # Display discovered instances
                                 echo "=== Discovered instances ==="
                                 ansible-inventory -i aws_ec2.yml --list | grep -A 5 "_image_builder" || echo "No _image_builder group found yet"
                                 
-                                # Wait for SSH to be ready
-                                echo "=== Waiting for Image Builder EC2 to be SSH-ready ==="
-                                MAX_WAIT=300
-                                WAIT_INTERVAL=10
+                                # Wait for SSH to be ready with better diagnostics
+                                echo "=== Waiting for Image Builder EC2 ($IMAGE_BUILDER_IP) to be SSH-ready ==="
+                                MAX_WAIT=600  # Increased to 10 minutes
+                                WAIT_INTERVAL=15
                                 ELAPSED=0
                                 
                                 while [ $ELAPSED -lt $MAX_WAIT ]; do
-                                    PING_OUTPUT=$(timeout 15 ansible -i aws_ec2.yml _image_builder -m ping -u ubuntu --private-key=${WORKSPACE}/.ssh/sonarqube-key.pem --timeout=10 2>&1) || true
-                                    if echo "$PING_OUTPUT" | grep -qE "SUCCESS|pong"; then
-                                        echo "✅ SSH access confirmed!"
-                                        break
+                                    # First, test direct SSH connection (faster and more reliable)
+                                    if timeout 10 ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=8 -o BatchMode=yes -i ${WORKSPACE}/.ssh/sonarqube-key.pem ubuntu@$IMAGE_BUILDER_IP "echo 'SSH_OK'" 2>&1 | grep -q "SSH_OK"; then
+                                        echo "✅ Direct SSH connection successful!"
+                                        # Verify with Ansible ping
+                                        PING_OUTPUT=$(timeout 15 ansible -i aws_ec2.yml _image_builder -m ping -u ubuntu --private-key=${WORKSPACE}/.ssh/sonarqube-key.pem --timeout=10 2>&1) || true
+                                        if echo "$PING_OUTPUT" | grep -qE "SUCCESS|pong"; then
+                                            echo "✅ Ansible ping confirmed!"
+                                            break
+                                        fi
                                     fi
+                                    
+                                    # Diagnostic output every 60 seconds
+                                    if [ $((ELAPSED % 60)) -eq 0 ] && [ $ELAPSED -gt 0 ]; then
+                                        echo "=== Diagnostics at ${ELAPSED}s ==="
+                                        echo "Testing SSH to $IMAGE_BUILDER_IP..."
+                                        ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 -o BatchMode=yes -i ${WORKSPACE}/.ssh/sonarqube-key.pem ubuntu@$IMAGE_BUILDER_IP "echo test" 2>&1 | head -3 || echo "SSH connection failed"
+                                        echo "Checking if instance is running..."
+                                        aws ec2 describe-instances --filters "Name=tag:type,Values=image-builder" "Name=instance-state-name,Values=running" --query 'Reservations[*].Instances[*].[InstanceId,PublicIpAddress,State.Name]' --output table 2>/dev/null || echo "Could not check instance state"
+                                    fi
+                                    
                                     echo "Waiting for SSH... (${ELAPSED}s/${MAX_WAIT}s)"
                                     sleep $WAIT_INTERVAL
                                     ELAPSED=$((ELAPSED + WAIT_INTERVAL))
                                 done
+                                
+                                # Final check before proceeding
+                                if [ $ELAPSED -ge $MAX_WAIT ]; then
+                                    echo "❌ ERROR: SSH connection timeout after ${MAX_WAIT}s"
+                                    echo "=== Troubleshooting Information ==="
+                                    echo "Image Builder IP: $IMAGE_BUILDER_IP"
+                                    echo "SSH Key: ${WORKSPACE}/.ssh/sonarqube-key.pem"
+                                    echo "Checking instance state..."
+                                    aws ec2 describe-instances --filters "Name=tag:type,Values=image-builder" --query 'Reservations[*].Instances[*].[InstanceId,PublicIpAddress,State.Name,SecurityGroups[0].GroupId]' --output table
+                                    echo "Checking security group rules..."
+                                    SG_ID=$(aws ec2 describe-instances --filters "Name=tag:type,Values=image-builder" --query 'Reservations[*].Instances[*].SecurityGroups[0].GroupId' --output text | head -1)
+                                    if [ -n "$SG_ID" ]; then
+                                        echo "Security Group: $SG_ID"
+                                        aws ec2 describe-security-groups --group-ids $SG_ID --query 'SecurityGroups[0].IpPermissions[?FromPort==`22`]' --output table
+                                    fi
+                                    echo "Testing direct SSH connection..."
+                                    ssh -v -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10 -i ${WORKSPACE}/.ssh/sonarqube-key.pem ubuntu@$IMAGE_BUILDER_IP "echo test" 2>&1 | tail -10
+                                    exit 1
+                                fi
                                 
                                 # Run playbook on Image Builder EC2 using dynamic inventory
                                 echo "=== Running Ansible Playbook on Image Builder EC2 (Dynamic Inventory) ==="
