@@ -168,10 +168,16 @@ pipeline {
                                     RAW_IP=$(aws ec2 describe-instances --filters "Name=tag:type,Values=image-builder" "Name=instance-state-name,Values=running" --query 'Reservations[0].Instances[0].PublicIpAddress' --output text 2>/dev/null || echo "")
                                     
                                     # Only set IMAGE_BUILDER_IP if it's a valid IPv4 address (no error messages)
-                                    if echo "$RAW_IP" | grep -qE '^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$'; then
-                                        IMAGE_BUILDER_IP="$RAW_IP"
-                                        echo "✅ Image Builder EC2 IP: $IMAGE_BUILDER_IP"
-                                        break
+                                    # Use simple validation to avoid Groovy regex escaping issues
+                                    if [ -n "$RAW_IP" ] && [ "$RAW_IP" != "None" ] && [ "$RAW_IP" != "null" ]; then
+                                        # Check if it looks like an IP (contains dots and numbers only)
+                                        if echo "$RAW_IP" | grep -qE '^[0-9]+[.][0-9]+[.][0-9]+[.][0-9]+$'; then
+                                            IMAGE_BUILDER_IP="$RAW_IP"
+                                            echo "✅ Image Builder EC2 IP: $IMAGE_BUILDER_IP"
+                                            break
+                                        else
+                                            IMAGE_BUILDER_IP=""
+                                        fi
                                     else
                                         IMAGE_BUILDER_IP=""
                                     fi
