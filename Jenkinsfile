@@ -146,45 +146,59 @@
                                 # Change to ansible repo directory (after checkout)
                                 cd $WORKSPACE
                                 
-                                # Check if inventory.yml exists (for static inventory)
-                                if [ -f inventory.yml ]; then
-                                    echo "=== Using static inventory (inventory.yml) ==="
-                                    export ANSIBLE_INVENTORY=inventory.yml
-                                    
-                                    # Test connectivity
-                                    echo "=== Testing connectivity to servers ==="
-                                    ansible all -m ping || echo "⚠️  Ping failed, but continuing..."
-                                    
-                                    # Run playbook with static inventory
-                                    echo "=== Running Ansible Playbook (Static Inventory) ==="
-                                    ansible-playbook -i inventory.yml site.yml
-                                else
-                                    echo "=== Using dynamic inventory (aws_ec2.yml) ==="
-                                    
-                                    # Wait for instances to be ready
-                                    echo "=== Waiting for EC2 instances to be ready ==="
-                                    MAX_RETRIES=30
-                                    RETRY_COUNT=0
-                                    while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-                                        if ansible-inventory -i aws_ec2.yml --list 2>/dev/null | grep -q "_sonarqube"; then
-                                            echo "✅ Instances found in inventory"
-                                            break
-                                        fi
-                                        echo "Waiting for instances... ($RETRY_COUNT/$MAX_RETRIES)"
-                                        sleep 10
-                                        RETRY_COUNT=$((RETRY_COUNT + 1))
-                                    done
-                                    
-                                    # Test connectivity
-                                    echo "=== Testing connectivity ==="
-                                    ansible -i aws_ec2.yml _sonarqube -m ping -u ubuntu --private-key=${WORKSPACE}/.ssh/sonarqube-key.pem || echo "⚠️  Ping failed, but continuing..."
-                                    
-                                    # Run playbook with dynamic inventory
-                                    echo "=== Running Ansible Playbook (Dynamic Inventory) ==="
-                                    ansible-playbook -i aws_ec2.yml site.yml \
-                                        --private-key=${WORKSPACE}/.ssh/sonarqube-key.pem \
-                                        -u ubuntu
-                                fi
+                                # Use dynamic inventory (aws_ec2.yml) - configured for Terraform-created infrastructure
+                                echo "=== Using dynamic inventory (aws_ec2.yml) ==="
+                                
+                                # Set environment variables for dynamic inventory
+                                export ANSIBLE_INVENTORY=aws_ec2.yml
+                                export ANSIBLE_HOST_KEY_CHECKING=False
+                                export ANSIBLE_SSH_TIMEOUT=120
+                                
+                                # Wait for instances to be ready
+                                echo "=== Waiting for EC2 instances to be ready ==="
+                                MAX_RETRIES=30
+                                RETRY_COUNT=0
+                                while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+                                    if ansible-inventory -i aws_ec2.yml --list 2>/dev/null | grep -q "_sonarqube"; then
+                                        echo "Instances found in inventory"
+                                        break
+                                    fi
+                                    echo "Waiting for instances... ($RETRY_COUNT/$MAX_RETRIES)"
+                                    sleep 10
+                                    RETRY_COUNT=$((RETRY_COUNT + 1))
+                                done
+                                
+                                # Display discovered instances
+                                echo "=== Discovered instances ==="
+                                ansible-inventory -i aws_ec2.yml --list | grep -A 5 "_sonarqube" || echo "No _sonarqube group found yet"
+                                
+                                # Wait for instances to be SSH-ready
+                                echo "=== Waiting for instances to be SSH-ready ==="
+                                MAX_WAIT=600  # 10 minutes
+                                WAIT_INTERVAL=15
+                                ELAPSED=0
+                                
+                                while [ $ELAPSED -lt $MAX_WAIT ]; do
+                                    if ansible -i aws_ec2.yml _sonarqube -m ping -u ubuntu --private-key=${WORKSPACE}/.ssh/sonarqube-key.pem --timeout=10 2>/dev/null | grep -q "SUCCESS"; then
+                                        echo "✅ All instances are SSH-ready!"
+                                        break
+                                    fi
+                                    echo "Waiting for SSH access... (${ELAPSED}s/${MAX_WAIT}s)"
+                                    sleep $WAIT_INTERVAL
+                                    ELAPSED=$((ELAPSED + WAIT_INTERVAL))
+                                done
+                                
+                                # Test connectivity
+                                echo "=== Testing connectivity ==="
+                                ansible -i aws_ec2.yml _sonarqube -m ping -u ubuntu --private-key=${WORKSPACE}/.ssh/sonarqube-key.pem || echo "⚠️  Ping failed, but continuing..."
+                                
+                                # Run playbook with dynamic inventory
+                                echo "=== Running Ansible Playbook (Dynamic Inventory) ==="
+                                ansible-playbook -i aws_ec2.yml site.yml \
+                                    --private-key=${WORKSPACE}/.ssh/sonarqube-key.pem \
+                                    -u ubuntu \
+                                    -e "ansible_ssh_timeout=120" \
+                                    -e "ansible_ssh_common_args='-o ControlMaster=no -o ControlPath=none -o ControlPersist=no -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ServerAliveInterval=3 -o ServerAliveCountMax=40 -o ConnectTimeout=60 -o BatchMode=yes -o TCPKeepAlive=yes -o Compression=no'"
                                 
                                 echo "✅ Playbook execution completed!"
                             '''
