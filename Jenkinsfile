@@ -82,7 +82,7 @@
                             chmod 400 $WORKSPACE/.ssh/sonarqube-key.pem
                             echo "infra created"
                             echo "ALB DNS: $(terraform output -raw alb_dns_name)"
-                            echo "Bastion IP: $(terraform output -raw public_ip_of_bastion)"
+                            echo "Image Builder IP: $(terraform output -raw image_builder_public_ip 2>/dev/null || terraform output -raw public_ip_of_bastion)"
                             echo "Private Instance IPs:"
                             terraform output -json aws_private_instance_ip | jq -r '.[]'
                         '''
@@ -131,7 +131,7 @@
                 }
             }
 
-            stage('Run Ansible') {
+            stage('Install SonarQube on Image Builder EC2') {
                 steps {
                     withCredentials([[$class: 'AmazonWebServicesCredentialsBinding',
                         credentialsId: 'aws-credentials',
@@ -140,108 +140,123 @@
                     ]]) {
                         withEnv(["PATH=${env.WORKSPACE}/venv/bin:${env.PATH}", "WORKSPACE=${env.WORKSPACE}", "ANSIBLE_HOST_KEY_CHECKING=False"]) {
                             sh '''
-                                # Activate virtual environment
                                 . $VENV_PATH/bin/activate
-                                
-                                # Change to ansible repo directory (after checkout)
                                 cd $WORKSPACE
                                 
-                                # Get bastion IP from Terraform output (for ProxyJump)
-                                BASTION_IP=$(terraform output -raw public_ip_of_bastion 2>/dev/null || echo "")
-                                if [ -z "$BASTION_IP" ]; then
-                                    echo "⚠️  Warning: Could not get bastion IP from Terraform output"
-                                    echo "Attempting to continue without ProxyJump (will only work if Jenkins is in peered VPC)"
-                                else
-                                    echo "=== Bastion IP: $BASTION_IP ==="
-                                    export BASTION_IP=$BASTION_IP
-                                fi
-                                
-                                # Use dynamic inventory (aws_ec2.yml) - configured for Terraform-created infrastructure
-                                echo "=== Using dynamic inventory (aws_ec2.yml) ==="
+                                echo "=== Using Dynamic Inventory (aws_ec2.yml) ==="
+                                echo "=== Installing SonarQube on Image Builder EC2 ==="
                                 
                                 # Set environment variables for dynamic inventory
                                 export ANSIBLE_INVENTORY=aws_ec2.yml
                                 export ANSIBLE_HOST_KEY_CHECKING=False
                                 export ANSIBLE_SSH_TIMEOUT=120
                                 
-                                # Wait for instances to be ready
-                                echo "=== Waiting for EC2 instances to be ready ==="
+                                # Wait for Image Builder EC2 to appear in dynamic inventory
+                                echo "=== Waiting for Image Builder EC2 to be discovered ==="
                                 MAX_RETRIES=30
                                 RETRY_COUNT=0
                                 while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-                                    if ansible-inventory -i aws_ec2.yml --list 2>/dev/null | grep -q "_sonarqube"; then
-                                        echo "Instances found in inventory"
+                                    if ansible-inventory -i aws_ec2.yml --list 2>/dev/null | grep -q "_image_builder"; then
+                                        echo "✅ Image Builder EC2 found in dynamic inventory"
                                         break
                                     fi
-                                    echo "Waiting for instances... ($RETRY_COUNT/$MAX_RETRIES)"
+                                    echo "Waiting for Image Builder EC2... ($RETRY_COUNT/$MAX_RETRIES)"
                                     sleep 10
                                     RETRY_COUNT=$((RETRY_COUNT + 1))
                                 done
                                 
                                 # Display discovered instances
                                 echo "=== Discovered instances ==="
-                                ansible-inventory -i aws_ec2.yml --list | grep -A 5 "_sonarqube" || echo "No _sonarqube group found yet"
+                                ansible-inventory -i aws_ec2.yml --list | grep -A 5 "_image_builder" || echo "No _image_builder group found yet"
                                 
-                                # Wait for instances to be SSH-ready
-                                echo "=== Waiting for instances to be SSH-ready ==="
-                                MAX_WAIT=600  # 10 minutes
-                                WAIT_INTERVAL=15
+                                # Wait for SSH to be ready
+                                echo "=== Waiting for Image Builder EC2 to be SSH-ready ==="
+                                MAX_WAIT=300
+                                WAIT_INTERVAL=10
                                 ELAPSED=0
-                                SSH_READY=false
                                 
                                 while [ $ELAPSED -lt $MAX_WAIT ]; do
-                                    echo "Testing SSH access... (${ELAPSED}s/${MAX_WAIT}s)"
-                                    # Use timeout to prevent hanging, capture output
-                                    PING_OUTPUT=$(timeout 30 ansible -i aws_ec2.yml _sonarqube -m ping -u ubuntu --private-key=${WORKSPACE}/.ssh/sonarqube-key.pem --timeout=10 2>&1) || true
-                                    
-                                    # Check for successful pings (look for "SUCCESS" or "pong" in output)
-                                    SUCCESS_COUNT=$(echo "$PING_OUTPUT" | grep -c "SUCCESS\|pong" || echo "0")
-                                    UNREACHABLE_COUNT=$(echo "$PING_OUTPUT" | grep -c "UNREACHABLE" || echo "0")
-                                    TOTAL_HOSTS=$(ansible-inventory -i aws_ec2.yml --list 2>/dev/null | jq -r '._sonarqube.hosts | length' 2>/dev/null || echo "2")
-                                    
-                                    # Show current status
-                                    echo "--- Ping Results ---"
-                                    echo "$PING_OUTPUT" | grep -E "(SUCCESS|UNREACHABLE|FAILED|pong|=>)" | head -10 || echo "No clear status yet..."
-                                    echo "Reachable: $SUCCESS_COUNT / $TOTAL_HOSTS"
-                                    
-                                    # If we have at least one successful ping, consider it ready
-                                    if [ "$SUCCESS_COUNT" -gt 0 ]; then
-                                        echo "✅ SSH access confirmed! ($SUCCESS_COUNT/$TOTAL_HOSTS hosts reachable)"
-                                        SSH_READY=true
+                                    PING_OUTPUT=$(timeout 15 ansible -i aws_ec2.yml _image_builder -m ping -u ubuntu --private-key=${WORKSPACE}/.ssh/sonarqube-key.pem --timeout=10 2>&1) || true
+                                    if echo "$PING_OUTPUT" | grep -qE "SUCCESS|pong"; then
+                                        echo "✅ SSH access confirmed!"
                                         break
                                     fi
-                                    
-                                    # If all hosts are unreachable and we've waited a bit, show warning
-                                    if [ "$UNREACHABLE_COUNT" -eq "$TOTAL_HOSTS" ] && [ $ELAPSED -gt 120 ]; then
-                                        echo "⚠️  All hosts still unreachable after ${ELAPSED}s"
-                                        echo "This might indicate network/security group issues"
-                                    fi
-                                    
-                                    echo "Waiting ${WAIT_INTERVAL}s before next attempt..."
+                                    echo "Waiting for SSH... (${ELAPSED}s/${MAX_WAIT}s)"
                                     sleep $WAIT_INTERVAL
                                     ELAPSED=$((ELAPSED + WAIT_INTERVAL))
                                 done
                                 
-                                if [ "$SSH_READY" = false ]; then
-                                    echo "                                    ⚠️  Warning: SSH readiness timeout reached, but continuing with playbook..."
-                                    echo "The playbook will attempt to connect and may wait for SSH during execution."
-                                fi
+                                # Run playbook on Image Builder EC2 using dynamic inventory
+                                echo "=== Running Ansible Playbook on Image Builder EC2 (Dynamic Inventory) ==="
+                                echo "This will install SonarQube on the public EC2 (15-30 minutes)..."
                                 
-                                # Test connectivity
-                                echo "=== Testing connectivity ==="
-                                ansible -i aws_ec2.yml _sonarqube -m ping -u ubuntu --private-key=${WORKSPACE}/.ssh/sonarqube-key.pem || echo "⚠️  Ping failed, but continuing..."
-                                
-                                # Run playbook with dynamic inventory
-                                echo "=== Running Ansible Playbook (Dynamic Inventory) ==="
+                                # Use site.yml but limit to _image_builder group
                                 ansible-playbook -i aws_ec2.yml site.yml \
+                                    --limit _image_builder \
                                     --private-key=${WORKSPACE}/.ssh/sonarqube-key.pem \
                                     -u ubuntu \
-                                    -e "ansible_ssh_timeout=120" \
-                                    -e "ansible_ssh_common_args='-o ControlMaster=no -o ControlPath=none -o ControlPersist=no -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ServerAliveInterval=3 -o ServerAliveCountMax=40 -o ConnectTimeout=60 -o BatchMode=yes -o TCPKeepAlive=yes -o Compression=no'"
+                                    --forks=1 \
+                                    -v
                                 
-                                echo "✅ Playbook execution completed!"
+                                echo "✅ SonarQube installed on Image Builder EC2!"
+                                echo "=== Verifying SonarQube installation ==="
+                                ansible -i aws_ec2.yml _image_builder -m shell -a "curl -s http://localhost:9000 | head -20 || echo 'SonarQube starting...'" -u ubuntu --private-key=${WORKSPACE}/.ssh/sonarqube-key.pem || echo "SonarQube may still be starting"
                             '''
                         }
+                    }
+                }
+            }
+            
+            stage('Create AMI and Launch Private Instances') {
+                steps {
+                    withCredentials([[$class: 'AmazonWebServicesCredentialsBinding',
+                        credentialsId: 'aws-credentials',
+                        accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                        secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                    ]]) {
+                        sh '''
+                            echo "=== Creating AMI from Image Builder EC2 ==="
+                            echo "This will create an AMI with SonarQube pre-installed"
+                            
+                            # Apply Terraform to create AMI and launch private instances
+                            # Step 1: Create AMI from Image Builder EC2 (with SonarQube installed)
+                            echo "Step 1: Creating AMI from Image Builder EC2 (with SonarQube)..."
+                            terraform apply -auto-approve \
+                                -var="create_ami=true" \
+                                -target=module.compute.aws_ami_from_instance.sonarqube_ami \
+                                -target=module.compute.aws_launch_template.sonarqube_lt \
+                                -target=module.compute.null_resource.stop_image_builder
+                            
+                            # Wait for AMI to be available
+                            echo "Waiting for AMI to be available (this may take 2-5 minutes)..."
+                            AMI_ID=$(terraform output -raw sonarqube_ami_id 2>/dev/null || echo "")
+                            if [ -n "$AMI_ID" ]; then
+                                echo "AMI ID: $AMI_ID"
+                                echo "Waiting for AMI to be in 'available' state..."
+                                aws ec2 wait image-available --image-ids $AMI_ID || echo "AMI may still be creating"
+                            fi
+                            
+                            # Step 2: Launch private instances using the AMI
+                            echo "Step 2: Launching private instances from AMI..."
+                            terraform apply -auto-approve \
+                                -var="create_ami=true" \
+                                -var="create_private_instances=true" \
+                                -target=module.compute.aws_instance.private_server_a \
+                                -target=module.compute.aws_instance.private_server_b \
+                                -target=module.compute.aws_lb_target_group_attachment.private_a_attachment \
+                                -target=module.compute.aws_lb_target_group_attachment.private_b_attachment
+                            
+                            echo "✅ AMI created and private instances launched!"
+                            echo ""
+                            echo "=== Private Instance IPs (from Launch Template) ==="
+                            terraform output -json aws_private_instance_ip | jq -r '.[]'
+                            echo ""
+                            echo "=== AMI ID ==="
+                            terraform output -raw sonarqube_ami_id
+                            echo ""
+                            echo "=== Launch Template ID ==="
+                            terraform output -raw launch_template_id
+                        '''
                     }
                 }
             }

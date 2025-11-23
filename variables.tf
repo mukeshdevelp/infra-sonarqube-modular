@@ -115,10 +115,28 @@ variable "alb_listener" {
   type        = list(string)
 }
 
+variable "create_ami" {
+  description = "Whether to create AMI from image builder (set to true after Ansible installs SonarQube)"
+  type        = bool
+  default     = false
+}
+
+variable "create_private_instances" {
+  description = "Whether to create private instances (set to true after AMI is created with SonarQube)"
+  type        = bool
+  default     = false
+}
+
 
 variable "peered_vpc_cidr" {
   type        = string
   description = "CIDR block of the peered VPC (e.g., 173.0.0.0/16)"
+}
+
+variable "allowed_http_https_cidrs" {
+  description = "Allowed CIDR blocks for HTTP/HTTPS access to ALB (defaults to whitelisted_ip if not specified)"
+  type        = list(string)
+  default     = []
 }
 
 variable "existing_vpc_id" {

@@ -51,3 +51,9 @@ variable "peered_vpc_cidr" {
   description = "Peered VPC CIDR block (e.g., 173.0.0.0/16)"
   type        = string
 }
+
+variable "allowed_http_https_cidrs" {
+  description = "Allowed CIDR blocks for HTTP/HTTPS access to ALB (defaults to allowed_host if not specified)"
+  type        = list(string)
+  default     = []
+}

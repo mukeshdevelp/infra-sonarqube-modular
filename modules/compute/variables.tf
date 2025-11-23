@@ -62,4 +62,16 @@ variable "alb_listener" {
   type        = any
   default     = []
 }
+
+variable "create_ami" {
+  description = "Whether to create AMI from image builder (set to true after Ansible installation)"
+  type        = bool
+  default     = false
+}
+
+variable "create_private_instances" {
+  description = "Whether to create private instances (set to true after AMI is created)"
+  type        = bool
+  default     = false
+}
  

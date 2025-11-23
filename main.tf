@@ -34,6 +34,7 @@ module "security" {
   vpc_id                   = module.vpc.vpc_id
   allowed_host             = var.whitelisted_ip
   everywhere_host          = var.all_hosts
+  allowed_http_https_cidrs = length(var.allowed_http_https_cidrs) > 0 ? var.allowed_http_https_cidrs : var.whitelisted_ip
   pub_subnet_a_association = module.vpc.public_subnets[0]
   pub_subnet_b_association = module.vpc.public_subnets[1]
   pri_subnet_a_association = module.vpc.private_subnets[0]
@@ -74,6 +75,10 @@ module "compute" {
   max_number     = var.max_number
   min_number     = var.min_number
   alb_listener   = [module.alb.alb_listener]
+  
+  # Control when AMI and private instances are created (after Ansible installation)
+  create_ami                = var.create_ami
+  create_private_instances  = var.create_private_instances
 }
 
 module "alb" {
