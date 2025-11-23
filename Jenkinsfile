@@ -146,6 +146,16 @@
                                 # Change to ansible repo directory (after checkout)
                                 cd $WORKSPACE
                                 
+                                # Get bastion IP from Terraform output (for ProxyJump)
+                                BASTION_IP=$(terraform output -raw public_ip_of_bastion 2>/dev/null || echo "")
+                                if [ -z "$BASTION_IP" ]; then
+                                    echo "⚠️  Warning: Could not get bastion IP from Terraform output"
+                                    echo "Attempting to continue without ProxyJump (will only work if Jenkins is in peered VPC)"
+                                else
+                                    echo "=== Bastion IP: $BASTION_IP ==="
+                                    export BASTION_IP=$BASTION_IP
+                                fi
+                                
                                 # Use dynamic inventory (aws_ec2.yml) - configured for Terraform-created infrastructure
                                 echo "=== Using dynamic inventory (aws_ec2.yml) ==="
                                 
@@ -177,16 +187,45 @@
                                 MAX_WAIT=600  # 10 minutes
                                 WAIT_INTERVAL=15
                                 ELAPSED=0
+                                SSH_READY=false
                                 
                                 while [ $ELAPSED -lt $MAX_WAIT ]; do
-                                    if ansible -i aws_ec2.yml _sonarqube -m ping -u ubuntu --private-key=${WORKSPACE}/.ssh/sonarqube-key.pem --timeout=10 2>/dev/null | grep -q "SUCCESS"; then
-                                        echo "✅ All instances are SSH-ready!"
+                                    echo "Testing SSH access... (${ELAPSED}s/${MAX_WAIT}s)"
+                                    # Use timeout to prevent hanging, capture output
+                                    PING_OUTPUT=$(timeout 30 ansible -i aws_ec2.yml _sonarqube -m ping -u ubuntu --private-key=${WORKSPACE}/.ssh/sonarqube-key.pem --timeout=10 2>&1) || true
+                                    
+                                    # Check for successful pings (look for "SUCCESS" or "pong" in output)
+                                    SUCCESS_COUNT=$(echo "$PING_OUTPUT" | grep -c "SUCCESS\|pong" || echo "0")
+                                    UNREACHABLE_COUNT=$(echo "$PING_OUTPUT" | grep -c "UNREACHABLE" || echo "0")
+                                    TOTAL_HOSTS=$(ansible-inventory -i aws_ec2.yml --list 2>/dev/null | jq -r '._sonarqube.hosts | length' 2>/dev/null || echo "2")
+                                    
+                                    # Show current status
+                                    echo "--- Ping Results ---"
+                                    echo "$PING_OUTPUT" | grep -E "(SUCCESS|UNREACHABLE|FAILED|pong|=>)" | head -10 || echo "No clear status yet..."
+                                    echo "Reachable: $SUCCESS_COUNT / $TOTAL_HOSTS"
+                                    
+                                    # If we have at least one successful ping, consider it ready
+                                    if [ "$SUCCESS_COUNT" -gt 0 ]; then
+                                        echo "✅ SSH access confirmed! ($SUCCESS_COUNT/$TOTAL_HOSTS hosts reachable)"
+                                        SSH_READY=true
                                         break
                                     fi
-                                    echo "Waiting for SSH access... (${ELAPSED}s/${MAX_WAIT}s)"
+                                    
+                                    # If all hosts are unreachable and we've waited a bit, show warning
+                                    if [ "$UNREACHABLE_COUNT" -eq "$TOTAL_HOSTS" ] && [ $ELAPSED -gt 120 ]; then
+                                        echo "⚠️  All hosts still unreachable after ${ELAPSED}s"
+                                        echo "This might indicate network/security group issues"
+                                    fi
+                                    
+                                    echo "Waiting ${WAIT_INTERVAL}s before next attempt..."
                                     sleep $WAIT_INTERVAL
                                     ELAPSED=$((ELAPSED + WAIT_INTERVAL))
                                 done
+                                
+                                if [ "$SSH_READY" = false ]; then
+                                    echo "                                    ⚠️  Warning: SSH readiness timeout reached, but continuing with playbook..."
+                                    echo "The playbook will attempt to connect and may wait for SSH during execution."
+                                fi
                                 
                                 # Test connectivity
                                 echo "=== Testing connectivity ==="
