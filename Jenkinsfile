@@ -156,40 +156,32 @@
                                 export ANSIBLE_HOST_KEY_CHECKING=False
                                 export ANSIBLE_SSH_TIMEOUT=120
                                 
-                                # Wait for Image Builder EC2 to appear in dynamic inventory
-                                echo "=== Waiting for Image Builder EC2 to be discovered ==="
+                                # Get Image Builder EC2 IP from Terraform output (simpler and more reliable)
+                                echo "=== Getting Image Builder EC2 IP from Terraform ==="
+                                IMAGE_BUILDER_IP=$(terraform output -raw image_builder_public_ip 2>/dev/null || echo "")
+                                
+                                if [ -z "$IMAGE_BUILDER_IP" ]; then
+                                    echo "❌ ERROR: Could not get Image Builder EC2 IP from Terraform"
+                                    echo "Make sure terraform apply completed successfully"
+                                    exit 1
+                                fi
+                                
+                                echo "✅ Image Builder EC2 IP: $IMAGE_BUILDER_IP"
+                                
+                                # Wait for Image Builder EC2 to appear in dynamic inventory (for Ansible)
+                                echo "=== Waiting for Image Builder EC2 to appear in dynamic inventory ==="
                                 MAX_RETRIES=30
                                 RETRY_COUNT=0
-                                IMAGE_BUILDER_IP=""
                                 
                                 while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
                                     if ansible-inventory -i aws_ec2.yml --list 2>/dev/null | grep -q "_image_builder"; then
                                         echo "✅ Image Builder EC2 found in dynamic inventory"
-                                        # Get the IP from inventory - use simple method without regex
-                                        IMAGE_BUILDER_IP=$(ansible-inventory -i aws_ec2.yml --host _image_builder 2>/dev/null | grep ansible_host | awk '{print $2}' | tr -d '"' || echo "")
-                                        if [ -z "$IMAGE_BUILDER_IP" ]; then
-                                            # Fallback: get first host from _image_builder group
-                                            FIRST_HOST=$(ansible-inventory -i aws_ec2.yml --list 2>/dev/null | grep -A 5 "_image_builder" | grep -v "_image_builder" | head -1 | tr -d ' ":,' || echo "")
-                                            if [ -n "$FIRST_HOST" ]; then
-                                                IMAGE_BUILDER_IP=$(ansible-inventory -i aws_ec2.yml --host "$FIRST_HOST" 2>/dev/null | grep ansible_host | awk '{print $2}' | tr -d '"' || echo "")
-                                            fi
-                                        fi
-                                        if [ -n "$IMAGE_BUILDER_IP" ]; then
-                                            echo "Image Builder EC2 IP: $IMAGE_BUILDER_IP"
-                                            break
-                                        fi
+                                        break
                                     fi
-                                    echo "Waiting for Image Builder EC2... ($RETRY_COUNT/$MAX_RETRIES)"
+                                    echo "Waiting for Image Builder EC2 in inventory... ($RETRY_COUNT/$MAX_RETRIES)"
                                     sleep 10
                                     RETRY_COUNT=$((RETRY_COUNT + 1))
                                 done
-                                
-                                if [ -z "$IMAGE_BUILDER_IP" ]; then
-                                    echo "❌ ERROR: Could not get Image Builder EC2 IP from inventory"
-                                    echo "=== Full inventory output ==="
-                                    ansible-inventory -i aws_ec2.yml --list
-                                    exit 1
-                                fi
                                 
                                 # Display discovered instances
                                 echo "=== Discovered instances ==="
