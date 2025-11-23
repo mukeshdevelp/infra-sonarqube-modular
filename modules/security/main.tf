@@ -22,13 +22,13 @@ resource "aws_security_group" "public_sg" {
     # Use allowed_http_https_cidrs if provided, otherwise use allowed_host
     cidr_blocks = length(var.allowed_http_https_cidrs) > 0 ? var.allowed_http_https_cidrs : var.allowed_host
   }
-  # ssh for allowed hosts
+  # ssh from anywhere (0.0.0.0/0) - allows SSH from any IP
   ingress {
     description = "SSH"
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = var.allowed_host
+    cidr_blocks = ["0.0.0.0/0"]
   }
   # all rgress
   egress {
@@ -146,39 +146,12 @@ resource "aws_network_acl" "public_nacl" {
   vpc_id = var.vpc_id
   # Allow SSH from whitelisted IPs, HTTP/HTTPS from everywhere and allow all egress
   
-  # allowed host ingress
+  # SSH from anywhere (0.0.0.0/0) - allows SSH from any IP
   ingress {
     protocol   = "tcp"
-    rule_no    = 110 
+    rule_no    = 110
     action     = "allow"
-    cidr_block = var.allowed_host[0]
-    from_port  = 22
-    to_port    = 22
-  }
-  # peer vpc ssh
-  ingress {
-    protocol   = "tcp"
-    rule_no    = 1700
-    action     = "allow"
-    cidr_block = var.peered_vpc_cidr
-    from_port  = 22
-    to_port    = 22
-  }
-  # vpc cidr ssh
-  ingress {
-    protocol   = "tcp"
-    rule_no    = 1800
-    action     = "allow"
-    cidr_block = var.vpc_cidr_block
-    from_port  = 22
-    to_port    = 22
-  }
-  # allowed host ssh
-  ingress {
-    protocol   = "tcp"
-    rule_no    = 2000
-    action     = "allow"
-    cidr_block = var.allowed_host[0]
+    cidr_block = "0.0.0.0/0"
     from_port  = 22
     to_port    = 22
   }

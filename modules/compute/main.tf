@@ -93,7 +93,7 @@ resource "null_resource" "stop_image_builder" {
         --instance-ids ${aws_instance.image_builder_ec2.id} \
         --region us-east-1 \
         || echo "Warning: Failed to stop instance (may already be stopped or credentials not set)"
-      echo "✅ Image Builder EC2 stop command executed"
+      echo "Image Builder EC2 stop command executed"
     EOT
   }
   
