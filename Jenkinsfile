@@ -1,135 +1,135 @@
-    pipeline {
-        agent any
+pipeline {
+    agent any
 
-        environment {
-            AWS_CREDS = credentials('aws-credentials')
-            TF_VAR_region = 'us-east-1'
-            TF_VAR_bucket_name = 'sonarqube-terraform-state-12'
-            SSH_KEY_PATH = "${WORKSPACE}/.ssh/sonarqube-key.pem"
-            // virtual env path
-            VENV_PATH = "${WORKSPACE}/venv"
+    environment {
+        AWS_CREDS = credentials('aws-credentials')
+        TF_VAR_region = 'us-east-1'
+        TF_VAR_bucket_name = 'sonarqube-terraform-state-12'
+        SSH_KEY_PATH = "${WORKSPACE}/.ssh/sonarqube-key.pem"
+        // virtual env path
+        VENV_PATH = "${WORKSPACE}/venv"
+    }
+
+    stages {
+
+        stage('Git Checkout - Terraform Repo') {
+            steps {
+                checkout([$class: 'GitSCM',
+                    branches: [[name: '*/main']],
+                    doGenerateSubmoduleConfigurations: false,
+                    extensions: [],
+                    userRemoteConfigs: [[
+                        url: 'https://github.com/mukeshdevelp/infra-sonarqube-modular.git',
+                        credentialsId: 'github-user-password'
+                    ]]
+                ])
+            }
         }
 
-        stages {
-
-            stage('Git Checkout - Terraform Repo') {
-                steps {
-                    checkout([$class: 'GitSCM',
-                        branches: [[name: '*/main']],
-                        doGenerateSubmoduleConfigurations: false,
-                        extensions: [],
-                        userRemoteConfigs: [[
-                            url: 'https://github.com/mukeshdevelp/infra-sonarqube-modular.git',
-                            credentialsId: 'github-user-password'
-                        ]]
-                    ])
+        stage('AWS CLI Test & Terraform Init') {
+            steps {
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws-credentials',
+                    accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                ]]) {
+                    sh '''
+                        aws s3 ls
+                        terraform init --reconfigure
+                        echo "terraform initialized"
+                    '''
                 }
             }
+        }
 
-            stage('AWS CLI Test & Terraform Init') {
-                steps {
-                    withCredentials([[$class: 'AmazonWebServicesCredentialsBinding',
-                        credentialsId: 'aws-credentials',
-                        accessKeyVariable: 'AWS_ACCESS_KEY_ID',
-                        secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
-                    ]]) {
-                        sh '''
-                            aws s3 ls
-                            terraform init --reconfigure
-                            echo "terraform initialized"
-                        '''
-                    }
-                }
-            }
-
-            stage('Terraform Formatting') {
-                steps {
+        stage('Terraform Formatting') {
+            steps {
                     sh 'terraform fmt && echo "form atted terraform code"'
                 }
-            }
+        }
 
-            stage('Terraform Validate') {
-                steps {
-                    sh 'terraform validate && echo "validated terraform code"'
-                }
+        stage('Terraform Validate') {
+            steps {
+                sh 'terraform validate && echo "validated terraform code"'
             }
+        }
 
-            stage('Terraform Plan') {
-                steps {
+        stage('Terraform Plan') {
+            steps {
                     withCredentials([[$class: 'AmazonWebServicesCredentialsBinding',
                         credentialsId: 'aws-credentials',
                         accessKeyVariable: 'AWS_ACCESS_KEY_ID',
                         secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
                     ]]) {
-                        sh 'terraform plan && echo "planning terraform code"'
+                sh 'terraform plan && echo "planning terraform code"'
                     }
-                }
             }
+        }
 
-            stage('Terraform Apply') {
-                steps {
+        stage('Terraform Apply') {
+            steps {
                     withCredentials([[$class: 'AmazonWebServicesCredentialsBinding',
                         credentialsId: 'aws-credentials',
                         accessKeyVariable: 'AWS_ACCESS_KEY_ID',
                         secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
                     ]]) {
-                        sh '''
+                sh '''
                             # Create .ssh directory if it doesn't exist (required for Terraform key creation)
                             mkdir -p $WORKSPACE/.ssh
                             chmod 700 $WORKSPACE/.ssh
                             
-                            terraform apply --auto-approve
-                            chmod 400 $WORKSPACE/.ssh/sonarqube-key.pem
-                            echo "infra created"
+                    terraform destroy --auto-approve
+                    chmod 400 $WORKSPACE/.ssh/sonarqube-key.pem
+                    echo "infra created"
                             echo "ALB DNS: $(terraform output -raw alb_dns_name)"
                             echo "Image Builder IP: $(terraform output -raw image_builder_public_ip 2>/dev/null || terraform output -raw public_ip_of_bastion)"
                             echo "Private Instance IPs:"
                             terraform output -json aws_private_instance_ip | jq -r '.[]'
-                        '''
+                '''
                     }
-                }
             }
+        }
 
-            stage('Store Private IPs') {
-                steps {
-                    sh '''
-                        ./store_ip.sh
-                    '''
-                }
+        stage('Store Private IPs') {
+            steps {
+                sh '''
+                ./store_ip.sh
+                '''
             }
+        }
 
-            stage('Git Checkout - Ansible Repo') {
-                steps {
-                    checkout([$class: 'GitSCM',
-                        branches: [[name: '*/main']],
-                        doGenerateSubmoduleConfigurations: false,
-                        extensions: [],
-                        userRemoteConfigs: [[
-                            url: 'https://github.com/mukeshdevelp/ansible-assignment-5-v2.git',
-                            credentialsId: 'github-user-password'
-                        ]]
-                    ])
-                }
+        stage('Git Checkout - Ansible Repo') {
+            steps {
+                checkout([$class: 'GitSCM',
+                    branches: [[name: '*/main']],
+                    doGenerateSubmoduleConfigurations: false,
+                    extensions: [],
+                    userRemoteConfigs: [[
+                        url: 'https://github.com/mukeshdevelp/ansible-assignment-5-v2.git',
+                        credentialsId: 'github-user-password'
+                    ]]
+                ])
             }
-
-            stage('Setup Virtualenv & Install Ansible dependencies') {
-                steps {
-                    sh '''
-                        
+        }
+       
+        stage('Setup Virtualenv & Install Ansible dependencies') {
+    steps {
+        sh '''
+            
                         
                         # Create virtual environment
-                        python3 -m venv $VENV_PATH
-                        . $VENV_PATH/bin/activate
-                        echo "Virtual environment activated at $VIRTUAL_ENV"
-                        
-                        pip install --upgrade pip
-                        pip install boto3 botocore ansible
-                        # Ansible collection
-                        ansible-galaxy collection install amazon.aws
-                        echo "Dependencies installed successfully"
-                    '''
-                }
-            }
+            python3 -m venv $VENV_PATH
+            . $VENV_PATH/bin/activate
+            echo "Virtual environment activated at $VIRTUAL_ENV"
+            
+            pip install --upgrade pip
+            pip install boto3 botocore ansible
+            # Ansible collection
+            ansible-galaxy collection install amazon.aws
+            echo "Dependencies installed successfully"
+        '''
+    }
+}
 
             stage('Install SonarQube on Image Builder EC2') {
                 steps {
@@ -153,37 +153,42 @@
                                 
                                 # Set environment variables for dynamic inventory
                                 export ANSIBLE_INVENTORY=aws_ec2.yml
-                                export ANSIBLE_HOST_KEY_CHECKING=False
+                     export ANSIBLE_HOST_KEY_CHECKING=False
                                 export ANSIBLE_SSH_TIMEOUT=120
                                 
-                                # Get Image Builder EC2 IP from Terraform output (need to go to Terraform directory)
-                                echo "=== Getting Image Builder EC2 IP from Terraform ==="
-                                # Terraform state is in the infra-sonarqube-modular directory (parent or sibling)
-                                TERRAFORM_DIR=$(find $WORKSPACE/.. -name "terraform.tfstate" -o -name "terraform.tfvars" 2>/dev/null | head -1 | xargs dirname 2>/dev/null || echo "$WORKSPACE/../infra-sonarqube-modular")
-                                if [ -d "$TERRAFORM_DIR" ]; then
-                                    cd "$TERRAFORM_DIR"
-                                    IMAGE_BUILDER_IP=$(terraform output -raw image_builder_public_ip 2>/dev/null || terraform output -raw public_ip_of_bastion 2>/dev/null || echo "")
-                                    cd $WORKSPACE
-                                else
-                                    IMAGE_BUILDER_IP=""
-                                fi
+                                # Get Image Builder EC2 IP directly from AWS (more reliable than Terraform output)
+                                echo "=== Getting Image Builder EC2 IP from AWS ==="
+                                # Wait for instance to be running and get IP (up to 3 minutes, then fail)
+                                MAX_WAIT_FOR_IP=180
+                                WAIT_COUNT=0
+                                IMAGE_BUILDER_IP=""
                                 
-                                if [ -z "$IMAGE_BUILDER_IP" ]; then
-                                    echo "⚠️  Terraform output not available, trying AWS CLI..."
-                                    # Get IP directly from AWS using instance tag
-                                    IMAGE_BUILDER_IP=$(aws ec2 describe-instances --filters "Name=tag:type,Values=image-builder" "Name=instance-state-name,Values=running" --query 'Reservations[0].Instances[0].PublicIpAddress' --output text 2>/dev/null || echo "")
-                                fi
+                                while [ $WAIT_COUNT -lt 18 ]; do
+                                    # Get IP directly from AWS using instance tag - validate it's a real IP
+                                    RAW_IP=$(aws ec2 describe-instances --filters "Name=tag:type,Values=image-builder" "Name=instance-state-name,Values=running" --query 'Reservations[0].Instances[0].PublicIpAddress' --output text 2>/dev/null || echo "")
+                                    
+                                    # Only set IMAGE_BUILDER_IP if it's a valid IPv4 address (no error messages)
+                                    if echo "$RAW_IP" | grep -qE '^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$'; then
+                                        IMAGE_BUILDER_IP="$RAW_IP"
+                                        echo "✅ Image Builder EC2 IP: $IMAGE_BUILDER_IP"
+                                        break
+                                    else
+                                        IMAGE_BUILDER_IP=""
+                                    fi
+                                    
+                                    echo "Waiting for Image Builder EC2 to be running and get public IP... ($WAIT_COUNT/18)"
+                                    echo "Current RAW_IP value: '$RAW_IP'"
+                                    sleep 10
+                                    WAIT_COUNT=$((WAIT_COUNT + 1))
+                                done
                                 
                                 if [ -z "$IMAGE_BUILDER_IP" ] || [ "$IMAGE_BUILDER_IP" = "None" ]; then
-                                    echo "❌ ERROR: Could not get Image Builder EC2 IP"
-                                    echo "Trying to get from Terraform state..."
-                                    terraform output
+                                    echo "❌ ERROR: Could not get Image Builder EC2 IP from AWS after 3 minutes"
                                     echo "Checking AWS instances..."
-                                    aws ec2 describe-instances --filters "Name=tag:type,Values=image-builder" --query 'Reservations[*].Instances[*].[InstanceId,PublicIpAddress,State.Name]' --output table
+                                    aws ec2 describe-instances --filters "Name=tag:type,Values=image-builder" --query 'Reservations[*].Instances[*].[InstanceId,PublicIpAddress,State.Name]' --output table || echo "AWS CLI failed"
+                                    echo "❌ BUILD FAILED: Cannot proceed without Image Builder EC2 IP"
                                     exit 1
                                 fi
-                                
-                                echo "✅ Image Builder EC2 IP: $IMAGE_BUILDER_IP"
                                 
                                 # Wait for Image Builder EC2 to appear in dynamic inventory (for Ansible)
                                 echo "=== Waiting for Image Builder EC2 to appear in dynamic inventory ==="
@@ -204,20 +209,22 @@
                                 echo "=== Discovered instances ==="
                                 ansible-inventory -i aws_ec2.yml --list | grep -A 5 "_image_builder" || echo "No _image_builder group found yet"
                                 
-                                # Wait for SSH to be ready with better diagnostics
+                                # Wait for SSH to be ready (max 5 minutes, then fail)
                                 echo "=== Waiting for Image Builder EC2 ($IMAGE_BUILDER_IP) to be SSH-ready ==="
-                                MAX_WAIT=600  # Increased to 10 minutes
+                                MAX_WAIT=300  # 5 minutes max - FAIL if not ready
                                 WAIT_INTERVAL=15
                                 ELAPSED=0
+                                SSH_SUCCESS=false
                                 
                                 while [ $ELAPSED -lt $MAX_WAIT ]; do
-                                    # First, test direct SSH connection (faster and more reliable)
+                                    # Test direct SSH connection (faster and more reliable)
                                     if timeout 10 ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=8 -o BatchMode=yes -i ${WORKSPACE}/.ssh/sonarqube-key.pem ubuntu@$IMAGE_BUILDER_IP "echo 'SSH_OK'" 2>&1 | grep -q "SSH_OK"; then
                                         echo "✅ Direct SSH connection successful!"
                                         # Verify with Ansible ping
                                         PING_OUTPUT=$(timeout 15 ansible -i aws_ec2.yml _image_builder -m ping -u ubuntu --private-key=${WORKSPACE}/.ssh/sonarqube-key.pem --timeout=10 2>&1) || true
                                         if echo "$PING_OUTPUT" | grep -qE "SUCCESS|pong"; then
                                             echo "✅ Ansible ping confirmed!"
+                                            SSH_SUCCESS=true
                                             break
                                         fi
                                     fi
@@ -226,7 +233,7 @@
                                     if [ $((ELAPSED % 60)) -eq 0 ] && [ $ELAPSED -gt 0 ]; then
                                         echo "=== Diagnostics at ${ELAPSED}s ==="
                                         echo "Testing SSH to $IMAGE_BUILDER_IP..."
-                                        ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 -o BatchMode=yes -i ${WORKSPACE}/.ssh/sonarqube-key.pem ubuntu@$IMAGE_BUILDER_IP "echo test" 2>&1 | head -3 || echo "SSH connection failed"
+                                        timeout 5 ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 -o BatchMode=yes -i ${WORKSPACE}/.ssh/sonarqube-key.pem ubuntu@$IMAGE_BUILDER_IP "echo test" 2>&1 | head -3 || echo "SSH connection failed"
                                         echo "Checking if instance is running..."
                                         aws ec2 describe-instances --filters "Name=tag:type,Values=image-builder" "Name=instance-state-name,Values=running" --query 'Reservations[*].Instances[*].[InstanceId,PublicIpAddress,State.Name]' --output table 2>/dev/null || echo "Could not check instance state"
                                     fi
@@ -235,6 +242,21 @@
                                     sleep $WAIT_INTERVAL
                                     ELAPSED=$((ELAPSED + WAIT_INTERVAL))
                                 done
+                                
+                                # FAIL BUILD if SSH not ready after timeout
+                                if [ "$SSH_SUCCESS" != "true" ]; then
+                                    echo "❌ ERROR: SSH connection timeout after ${MAX_WAIT}s (5 minutes)"
+                                    echo "Image Builder IP: $IMAGE_BUILDER_IP"
+                                    echo "Jenkins IP: $JENKINS_PUBLIC_IP"
+                                    echo "Checking security group rules..."
+                                    SG_ID=$(aws ec2 describe-instances --filters "Name=tag:type,Values=image-builder" --query 'Reservations[0].Instances[0].SecurityGroups[0].GroupId' --output text 2>/dev/null || echo "")
+                                    if [ -n "$SG_ID" ]; then
+                                        echo "Security Group: $SG_ID"
+                                        aws ec2 describe-security-groups --group-ids $SG_ID --query 'SecurityGroups[0].IpPermissions[?FromPort==`22`]' --output table 2>/dev/null || echo "Could not get security group rules"
+                                    fi
+                                    echo "❌ BUILD FAILED: Cannot proceed without SSH access to Image Builder EC2"
+                                    exit 1
+                                fi
                                 
                                 # Final check before proceeding
                                 if [ $ELAPSED -ge $MAX_WAIT ]; then
@@ -347,9 +369,9 @@
                 }
             }
 
-        } // end stages
+    } // end stages
 
-        post {
+    post {
             always {
                 script {
                     try {
@@ -369,19 +391,19 @@
                     }
                 }
             }
-            success {
+        success {
                 echo "=========================================="
                 echo "✓ Pipeline completed successfully!"
                 echo "✓ Infrastructure created"
                 echo "✓ Ansible playbook executed"
                 echo "=========================================="
-            }
-            failure {
+        }
+        failure {
                 echo "=========================================="
                 echo "✗ Pipeline failed!"
                 echo "Check console output above for errors"
                 echo "=========================================="
             }
-        }
+    }
 
-    } // end pipeline
+} // end pipeline
