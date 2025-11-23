@@ -165,11 +165,19 @@
                                 while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
                                     if ansible-inventory -i aws_ec2.yml --list 2>/dev/null | grep -q "_image_builder"; then
                                         echo "✅ Image Builder EC2 found in dynamic inventory"
-                                        # Get the IP from inventory
-                                        IMAGE_BUILDER_IP=$(ansible-inventory -i aws_ec2.yml --list 2>/dev/null | grep -A 10 "_image_builder" | grep -oP '"ansible_host":\s*"[\d.]+"' | head -1 | grep -oP '\d+\.\d+\.\d+\.\d+' || echo "")
+                                        # Get the IP from inventory (using simpler method to avoid Groovy escaping issues)
+                                        IMAGE_BUILDER_IP=$(ansible-inventory -i aws_ec2.yml --list 2>/dev/null | grep -A 20 "_image_builder" | grep "ansible_host" | head -1 | sed 's/.*"ansible_host": *"\([^"]*\)".*/\1/' || echo "")
                                         if [ -z "$IMAGE_BUILDER_IP" ]; then
                                             # Try to get from hostvars
                                             IMAGE_BUILDER_IP=$(ansible-inventory -i aws_ec2.yml --host _image_builder 2>/dev/null | grep ansible_host | awk '{print $2}' | tr -d '"' || echo "")
+                                        fi
+                                        if [ -z "$IMAGE_BUILDER_IP" ]; then
+                                            # Try using jq if available
+                                            IMAGE_BUILDER_IP=$(ansible-inventory -i aws_ec2.yml --list 2>/dev/null | jq -r '._image_builder.hosts[0] // empty' 2>/dev/null || echo "")
+                                            if [ -n "$IMAGE_BUILDER_IP" ]; then
+                                                # Get ansible_host for this IP
+                                                IMAGE_BUILDER_IP=$(ansible-inventory -i aws_ec2.yml --host "$IMAGE_BUILDER_IP" 2>/dev/null | grep ansible_host | awk '{print $2}' | tr -d '"' || echo "")
+                                            fi
                                         fi
                                         if [ -n "$IMAGE_BUILDER_IP" ]; then
                                             echo "Image Builder EC2 IP: $IMAGE_BUILDER_IP"
@@ -236,8 +244,25 @@
                                     SG_ID=$(aws ec2 describe-instances --filters "Name=tag:type,Values=image-builder" --query 'Reservations[*].Instances[*].SecurityGroups[0].GroupId' --output text | head -1)
                                     if [ -n "$SG_ID" ]; then
                                         echo "Security Group: $SG_ID"
+                                        echo "Current SSH rules:"
                                         aws ec2 describe-security-groups --group-ids $SG_ID --query 'SecurityGroups[0].IpPermissions[?FromPort==`22`]' --output table
+                                        echo ""
+                                        echo "Whitelisted IPs in terraform.tfvars:"
+                                        echo "  - 103.87.45.36/32"
+                                        echo "  - 173.0.0.0/16"
+                                        echo ""
+                                        echo "Jenkins Server Public IP: $JENKINS_PUBLIC_IP"
+                                        echo ""
+                                        if [ "$JENKINS_PUBLIC_IP" != "unknown" ]; then
+                                            if echo "103.87.45.36 173.0.0.0" | grep -q "$JENKINS_PUBLIC_IP"; then
+                                                echo "✅ Jenkins IP appears to be whitelisted"
+                                            else
+                                                echo "❌ Jenkins IP ($JENKINS_PUBLIC_IP) may not be whitelisted!"
+                                                echo "   Add it to whitelisted_ip in terraform.tfvars and run terraform apply"
+                                            fi
+                                        fi
                                     fi
+                                    echo ""
                                     echo "Testing direct SSH connection..."
                                     ssh -v -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10 -i ${WORKSPACE}/.ssh/sonarqube-key.pem ubuntu@$IMAGE_BUILDER_IP "echo test" 2>&1 | tail -10
                                     exit 1
