@@ -156,13 +156,30 @@
                                 export ANSIBLE_HOST_KEY_CHECKING=False
                                 export ANSIBLE_SSH_TIMEOUT=120
                                 
-                                # Get Image Builder EC2 IP from Terraform output (simpler and more reliable)
+                                # Get Image Builder EC2 IP from Terraform output (need to go to Terraform directory)
                                 echo "=== Getting Image Builder EC2 IP from Terraform ==="
-                                IMAGE_BUILDER_IP=$(terraform output -raw image_builder_public_ip 2>/dev/null || echo "")
+                                # Terraform state is in the infra-sonarqube-modular directory (parent or sibling)
+                                TERRAFORM_DIR=$(find $WORKSPACE/.. -name "terraform.tfstate" -o -name "terraform.tfvars" 2>/dev/null | head -1 | xargs dirname 2>/dev/null || echo "$WORKSPACE/../infra-sonarqube-modular")
+                                if [ -d "$TERRAFORM_DIR" ]; then
+                                    cd "$TERRAFORM_DIR"
+                                    IMAGE_BUILDER_IP=$(terraform output -raw image_builder_public_ip 2>/dev/null || terraform output -raw public_ip_of_bastion 2>/dev/null || echo "")
+                                    cd $WORKSPACE
+                                else
+                                    IMAGE_BUILDER_IP=""
+                                fi
                                 
                                 if [ -z "$IMAGE_BUILDER_IP" ]; then
-                                    echo "❌ ERROR: Could not get Image Builder EC2 IP from Terraform"
-                                    echo "Make sure terraform apply completed successfully"
+                                    echo "⚠️  Terraform output not available, trying AWS CLI..."
+                                    # Get IP directly from AWS using instance tag
+                                    IMAGE_BUILDER_IP=$(aws ec2 describe-instances --filters "Name=tag:type,Values=image-builder" "Name=instance-state-name,Values=running" --query 'Reservations[0].Instances[0].PublicIpAddress' --output text 2>/dev/null || echo "")
+                                fi
+                                
+                                if [ -z "$IMAGE_BUILDER_IP" ] || [ "$IMAGE_BUILDER_IP" = "None" ]; then
+                                    echo "❌ ERROR: Could not get Image Builder EC2 IP"
+                                    echo "Trying to get from Terraform state..."
+                                    terraform output
+                                    echo "Checking AWS instances..."
+                                    aws ec2 describe-instances --filters "Name=tag:type,Values=image-builder" --query 'Reservations[*].Instances[*].[InstanceId,PublicIpAddress,State.Name]' --output table
                                     exit 1
                                 fi
                                 
