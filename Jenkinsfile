@@ -188,7 +188,7 @@ pipeline {
                                 echo ""
                                 echo "Checking if instances have correct tags..."
                                 echo "Instances found:"
-                                ansible-inventory -i aws_ec2.yml --list 2>&1 | grep -oP '10\.0\.\d+\.\d+' | head -10
+                                ansible-inventory -i aws_ec2.yml --list 2>&1 | grep -oP '10\\.0\\.\\d+\\.\\d+' | head -10
                             fi
                             echo ""
                             
@@ -205,7 +205,7 @@ pipeline {
                                 if echo "$INVENTORY_OUTPUT" | grep -q "_sonarqube"; then
                                     echo "Instances found in inventory, testing SSH connectivity..."
                                     # Try a quick SSH test to one instance
-                                    FIRST_HOST=$(ansible-inventory -i aws_ec2.yml _sonarqube --list 2>&1 | grep -oP '10\.0\.\d+\.\d+' | head -1)
+                                    FIRST_HOST=$(ansible-inventory -i aws_ec2.yml _sonarqube --list 2>&1 | grep -oP '10\\.0\\.\\d+\\.\\d+' | head -1)
                                     if [ -n "$FIRST_HOST" ]; then
                                         echo "Testing SSH to $FIRST_HOST..."
                                         if timeout 5 ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i ${WORKSPACE}/.ssh/sonarqube-key.pem ubuntu@${FIRST_HOST} "echo 'SSH ready'" 2>/dev/null; then
@@ -272,13 +272,15 @@ pipeline {
                             fi
                             
                             # Run playbook with explicit settings and cache flushing
+                            # Increased timeouts and keepalive for long-running playbooks
                             echo "=== Running Ansible Playbook (No Cache, Fresh State) ==="
                             ansible-playbook -i aws_ec2.yml site.yml \
                                 --private-key=${WORKSPACE}/.ssh/sonarqube-key.pem \
                                 -u ubuntu \
-                                -e "ansible_ssh_timeout=30" \
-                                -e "ansible_ssh_common_args='-o ControlMaster=no -o ControlPath=none -o ControlPersist=no -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ServerAliveInterval=10 -o ServerAliveCountMax=3 -o ConnectTimeout=20 -o BatchMode=yes -o TCPKeepAlive=yes'" \
+                                -e "ansible_ssh_timeout=60" \
+                                -e "ansible_ssh_common_args='-o ControlMaster=no -o ControlPath=none -o ControlPersist=no -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ServerAliveInterval=5 -o ServerAliveCountMax=12 -o ConnectTimeout=30 -o BatchMode=yes -o TCPKeepAlive=yes -o Compression=no'" \
                                 --flush-cache \
+                                --forks=1 \
                                 -v
                         '''
                     }
