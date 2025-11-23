@@ -146,6 +146,11 @@
                                 echo "=== Using Dynamic Inventory (aws_ec2.yml) ==="
                                 echo "=== Installing SonarQube on Image Builder EC2 ==="
                                 
+                                # Get Jenkins server's public IP for diagnostics
+                                JENKINS_PUBLIC_IP=$(curl -s https://checkip.amazonaws.com 2>/dev/null || echo "unknown")
+                                echo "=== Jenkins Server Public IP: $JENKINS_PUBLIC_IP ==="
+                                echo "⚠️  If SSH fails, ensure this IP is in whitelisted_ip in terraform.tfvars"
+                                
                                 # Set environment variables for dynamic inventory
                                 export ANSIBLE_INVENTORY=aws_ec2.yml
                                 export ANSIBLE_HOST_KEY_CHECKING=False
