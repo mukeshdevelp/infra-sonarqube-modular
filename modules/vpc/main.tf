@@ -1,3 +1,8 @@
+# Get available availability zones in us-east-1
+data "aws_availability_zones" "available" {
+  state = "available"
+}
+
 # creating vpc and subents
 resource "aws_vpc" "sonarqube_vpc" {
   cidr_block           = var.vpc_cidr_block
@@ -12,7 +17,7 @@ resource "aws_vpc" "sonarqube_vpc" {
 resource "aws_subnet" "public_a" {
   vpc_id                  = aws_vpc.sonarqube_vpc.id
   cidr_block              = var.public_subnet_a_cidr_block
-  availability_zone       = var.public_subnet_a_az
+  availability_zone       = var.public_subnet_a_az != "" ? var.public_subnet_a_az : data.aws_availability_zones.available.names[0]
   map_public_ip_on_launch = true
   tags = { 
     Name = "sonar-public-subnet-a"
@@ -25,7 +30,7 @@ resource "aws_subnet" "public_a" {
 resource "aws_subnet" "public_b" {
   vpc_id                  = aws_vpc.sonarqube_vpc.id
   cidr_block              = var.public_subnet_b_cidr_block
-  availability_zone       = var.public_subnet_b_az
+  availability_zone       = var.public_subnet_b_az != "" ? var.public_subnet_b_az : data.aws_availability_zones.available.names[1]
   map_public_ip_on_launch = true
   tags = { 
     Name = "sonar-public-subnet-b"
@@ -38,7 +43,7 @@ resource "aws_subnet" "public_b" {
 resource "aws_subnet" "private_a" {
   vpc_id            = aws_vpc.sonarqube_vpc.id
   cidr_block        = var.private_subnet_a_cidr_block
-  availability_zone = var.private_subnet_a_az
+  availability_zone = var.private_subnet_a_az != "" ? var.private_subnet_a_az : data.aws_availability_zones.available.names[0]
   tags = { 
     Name = "sonar-private-subnet-a"
     az = "1a"
@@ -50,7 +55,7 @@ resource "aws_subnet" "private_a" {
 resource "aws_subnet" "private_b" {
   vpc_id            = aws_vpc.sonarqube_vpc.id
   cidr_block        = var.private_subnet_b_cidr_block
-  availability_zone = var.private_subnet_b_az
+  availability_zone = var.private_subnet_b_az != "" ? var.private_subnet_b_az : data.aws_availability_zones.available.names[1]
   tags = { 
     Name = "sonar-private-subnet-b"
     az = "1b"

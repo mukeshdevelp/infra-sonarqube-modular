@@ -85,52 +85,48 @@ module "alb" {
 }
 
 
+# Get available availability zones in us-east-1
+data "aws_availability_zones" "available" {
+  state = "available"
+}
+
+# Try to find existing VPC for peering in us-east-1 (optional - will skip if not found)
+# Both VPCs must be in us-east-1 for peering to work
 data "aws_vpc" "existing_vpc" {
-  filter {
-    name = "tag:Name"
-    values = ["project-vpc"]
-  }
+  count = var.existing_vpc_id != "" ? 1 : 0
+  id    = var.existing_vpc_id
 }
 
-# FETCH ROUTE TABLES OF EXISTING VPC
+# FETCH ROUTE TABLES OF EXISTING VPC (if it exists)
 data "aws_route_tables" "existing_vpc_rts" {
-  vpc_id = data.aws_vpc.existing_vpc.id
+  count  = var.existing_vpc_id != "" ? 1 : 0
+  vpc_id = data.aws_vpc.existing_vpc[0].id
 }
 
+# VPC Peering - only create if existing VPC ID is provided
+# Both VPCs must be in us-east-1
 module "vpc_peering" {
   source = "./modules/peering"
+  count  = var.existing_vpc_id != "" ? 1 : 0
 
+  # REQUESTER → EXISTING VPC (173.0.0.0/16) in us-east-1
+  requester_vpc_id       = data.aws_vpc.existing_vpc[0].id
+  requester_vpc_cidr     = var.peered_vpc_cidr
+  requester_route_tables = data.aws_route_tables.existing_vpc_rts[0].ids
 
-  # REQUESTER → EXISTING VPC (173.0.0.0/16)
-
-
-  requester_vpc_id   = data.aws_vpc.existing_vpc.id
-  requester_vpc_cidr = var.peered_vpc_cidr
-
-  requester_route_tables = data.aws_route_tables.existing_vpc_rts.ids
-
-
-  #########################################
-  # ACCEPTER → NEW VPC (10.0.0.0/16)
-  #########################################
-
-  accepter_vpc_id   = module.vpc.vpc_id         # <-- Your newly created VPC
-  accepter_vpc_cidr = module.vpc.vpc_cidr_block # usually 10.0.0.0/16
-
+  # ACCEPTER → NEW VPC (10.0.0.0/16) in us-east-1
+  accepter_vpc_id       = module.vpc.vpc_id
+  accepter_vpc_cidr     = module.vpc.vpc_cidr_block
   accepter_route_tables = [module.network.private_rt_id]
-  # OR hardcode:
-  # accepter_route_tables = ["rtb-yyyyyyy"]
 
-  #########################################
-  # META CONFIG
-  #########################################
-
+  # META CONFIG - Both VPCs in same region (us-east-1)
   name        = "peering-173-to-10"
-  #peer_region = "us-east-1"
   auto_accept = true
+  # peer_region not needed since both VPCs are in us-east-1
 
   tags = {
     Project = "sonarqube-deployment"
     Owner   = "Mukesh"
+    Region  = "us-east-1"
   }
 }
