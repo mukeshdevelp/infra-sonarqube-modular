@@ -205,7 +205,7 @@ pipeline {
             }
         }
         
-        stage('Run Ansible') {
+        stage('Install SonarQube using Dynamic Inventory') {
             steps {
                 withEnv(["PATH=${env.WORKSPACE}/venv/bin:${env.PATH}"]) {
                     withCredentials([[$class: 'AmazonWebServicesCredentialsBinding',
@@ -226,8 +226,24 @@ pipeline {
                             
                             export ANSIBLE_HOST_KEY_CHECKING=False
                             
-                            echo "=== Running Ansible Playbook ==="
+                            echo "=========================================="
+                            echo "PRIMARY TASK: Installing SonarQube using Dynamic Inventory"
+                            echo "=========================================="
+                            echo "Using dynamic inventory: aws_ec2.yml"
+                            echo "Target hosts: _sonarqube (discovered via AWS EC2 tags)"
+                            echo "Playbook: site.yml"
+                            echo ""
+                            
+                            # Display dynamic inventory before running
+                            echo "=== Dynamic Inventory Discovery ==="
+                            ansible-inventory -i aws_ec2.yml --list
+                            echo ""
+                            
+                            echo "=== Running Ansible Playbook with Dynamic Inventory ==="
                             ansible-playbook -i aws_ec2.yml -u ubuntu --private-key="$SSH_KEY" site.yml
+                            
+                            echo ""
+                            echo "SUCCESS: SonarQube installation completed using dynamic inventory"
                         '''
                     }
                 }
@@ -240,7 +256,10 @@ pipeline {
     post {
         
         success {
-            echo "Pipeline completed successfully: Infra created + Ansible executed."
+            echo "=========================================="
+            echo "Pipeline completed successfully!"
+            echo "Primary task completed: SonarQube installed using dynamic inventory"
+            echo "=========================================="
         }
         failure {
             echo "Pipeline failed. Check console output for errors."
