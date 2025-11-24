@@ -113,12 +113,15 @@ pipeline {
         stage('ssh key permissions'){
             steps {
                 sh '''
+                    set -e
+                    
                     # Fix SSH key permissions
                     chmod 400 $SSH_KEY_PATH
                     
-                    # Source the IPs from the stored environment file
+                    # Source the IPs from the stored environment file using POSIX-compliant . command
                     if [ -f "${WORKSPACE}/ips.env" ]; then
-                        source "${WORKSPACE}/ips.env"
+                        # Use . instead of source (POSIX-compliant, works in both sh and bash)
+                        . "${WORKSPACE}/ips.env"
                         echo "Bastion IP from stored file: ${BASTION_PUBLIC_IP}"
                         echo "Bastion DNS from stored file: ${BASTION_PUBLIC_DNS}"
                     else
@@ -168,24 +171,24 @@ pipeline {
         }
 
        
-        stage('Setup Virtualenv & Install Ansible dependencies') {
-    steps {
-        sh '''
-            
-            python3 -m venv $VENV_PATH
-            . $VENV_PATH/bin/activate
-            echo "Virtual environment activated at $VIRTUAL_ENV"
-            
-            pip install --upgrade pip
-            pip install boto3 botocore ansible
+            stage('Setup Virtualenv & Install Ansible dependencies') {
+        steps {
+            sh '''
+                
+                python3 -m venv $VENV_PATH
+                . $VENV_PATH/bin/activate
+                echo "Virtual environment activated at $VIRTUAL_ENV"
+                
+                pip install --upgrade pip
+                pip install boto3 botocore ansible
 
-            # Ansible collection
-            ansible-galaxy collection install amazon.aws
-            
-            echo "Dependencies installed successfully"
-        '''
-    }
-}       
+                # Ansible collection
+                ansible-galaxy collection install amazon.aws
+                
+                echo "Dependencies installed successfully"
+            '''
+        }
+    }       
 
 
         stage('pinging the instances') {
@@ -197,6 +200,7 @@ pipeline {
                         secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
                     ]]) {
                         sh '''
+                            #!/bin/bash
                             set -e  # Exit immediately if a command exits with a non-zero status
                             
                             . $VENV_PATH/bin/activate
@@ -206,11 +210,37 @@ pipeline {
                             export AWS_SECRET_ACCESS_KEY
                             export AWS_DEFAULT_REGION=us-east-1
                             
+                            # Get bastion host information for ProxyCommand
+                            if [ -f "${WORKSPACE}/ips.env" ]; then
+                                . "${WORKSPACE}/ips.env"
+                            fi
+                            
+                            # Prefer DNS over IP (DNS is more stable if IP changes)
+                            if [ -n "$BASTION_PUBLIC_DNS" ] && [ "$BASTION_PUBLIC_DNS" != "N/A" ]; then
+                                export BASTION_HOST="$BASTION_PUBLIC_DNS"
+                                echo "Using Bastion DNS for ProxyCommand: ${BASTION_HOST}"
+                            elif [ -n "$BASTION_PUBLIC_IP" ] && [ "$BASTION_PUBLIC_IP" != "N/A" ]; then
+                                export BASTION_HOST="$BASTION_PUBLIC_IP"
+                                echo "Using Bastion IP for ProxyCommand: ${BASTION_HOST}"
+                            else
+                                # Fallback: Get bastion IP/DNS directly from Terraform output
+                                BASTION_PUBLIC_IP=$(terraform output -raw bastion_public_ip 2>/dev/null || echo "")
+                                BASTION_PUBLIC_DNS=$(terraform output -raw bastion_public_dns 2>/dev/null || echo "")
+                                if [ -n "$BASTION_PUBLIC_DNS" ] && [ "$BASTION_PUBLIC_DNS" != "N/A" ]; then
+                                    export BASTION_HOST="$BASTION_PUBLIC_DNS"
+                                elif [ -n "$BASTION_PUBLIC_IP" ] && [ "$BASTION_PUBLIC_IP" != "N/A" ]; then
+                                    export BASTION_HOST="$BASTION_PUBLIC_IP"
+                                else
+                                    echo "WARNING: Bastion host not found - private instances may not be accessible"
+                                fi
+                            fi
+                            
                             # SSH key path - use SSH_KEY_PATH from environment block
                             SSH_KEY="$SSH_KEY_PATH"
                             echo "WORKSPACE: ${WORKSPACE}"
                             echo "SSH_KEY_PATH: ${SSH_KEY_PATH}"
                             echo "SSH_KEY: $SSH_KEY"
+                            echo "BASTION_HOST: ${BASTION_HOST:-not set}"
                             
                             # Fix directory and key permissions
                             SSH_DIR="$(dirname "$SSH_KEY")"
@@ -258,58 +288,144 @@ pipeline {
         }
         
         
-        stage('Install SonarQube using Dynamic Inventory') {
+        stage('Install SonarQube from Bastion Host') {
             steps {
-                withEnv(["PATH=${env.WORKSPACE}/venv/bin:${env.PATH}"]) {
-                    withCredentials([[$class: 'AmazonWebServicesCredentialsBinding',
-                        credentialsId: 'aws-credentials',
-                        accessKeyVariable: 'AWS_ACCESS_KEY_ID',
-                        secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
-                    ]]) {
-                        sh '''
-                            . $VENV_PATH/bin/activate
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws-credentials',
+                    accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                ]]) {
+                    sh '''
+                        #!/bin/bash
+                        set -e  # Exit immediately on error
+                        
+                        # Get bastion host information
+                        if [ -f "${WORKSPACE}/ips.env" ]; then
+                            . "${WORKSPACE}/ips.env"
+                        fi
+                        
+                        # Prefer DNS over IP (DNS is more stable if IP changes)
+                        if [ -n "$BASTION_PUBLIC_DNS" ] && [ "$BASTION_PUBLIC_DNS" != "N/A" ]; then
+                            BASTION_HOST="$BASTION_PUBLIC_DNS"
+                        elif [ -n "$BASTION_PUBLIC_IP" ] && [ "$BASTION_PUBLIC_IP" != "N/A" ]; then
+                            BASTION_HOST="$BASTION_PUBLIC_IP"
+                        else
+                            # Fallback: Get bastion IP/DNS directly from Terraform output
+                            BASTION_PUBLIC_IP=$(terraform output -raw bastion_public_ip 2>/dev/null || echo "")
+                            BASTION_PUBLIC_DNS=$(terraform output -raw bastion_public_dns 2>/dev/null || echo "")
+                            if [ -n "$BASTION_PUBLIC_DNS" ] && [ "$BASTION_PUBLIC_DNS" != "N/A" ]; then
+                                BASTION_HOST="$BASTION_PUBLIC_DNS"
+                            elif [ -n "$BASTION_PUBLIC_IP" ] && [ "$BASTION_PUBLIC_IP" != "N/A" ]; then
+                                BASTION_HOST="$BASTION_PUBLIC_IP"
+                            else
+                                echo "ERROR: Bastion host not found!"
+                                exit 1
+                            fi
+                        fi
+                        
+                        SSH_KEY="${WORKSPACE}/.ssh/sonarqube-key.pem"
+                        if [ ! -f "$SSH_KEY" ]; then
+                            echo "ERROR: SSH key not found at $SSH_KEY"
+                            exit 1
+                        fi
+                        
+                        echo "=========================================="
+                        echo "Installing SonarQube from Bastion Host"
+                        echo "=========================================="
+                        echo "Bastion Host: $BASTION_HOST"
+                        echo "Strategy: SSH into bastion, run Ansible from there"
+                        echo ""
+                        
+                        # Step 1: Copy Ansible playbook files to bastion
+                        echo "=== Step 1: Copying Ansible files to bastion ==="
+                        ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no ubuntu@$BASTION_HOST "mkdir -p ~/ansible-playbook"
+                        scp -i "$SSH_KEY" -o StrictHostKeyChecking=no -r \
+                            site.yml \
+                            aws_ec2.yml \
+                            ansible.cfg \
+                            roles/ \
+                            ubuntu@$BASTION_HOST:~/ansible-playbook/
+                        echo "Files copied successfully"
+                        echo ""
+                        
+                        # Step 2: Install Ansible and dependencies on bastion
+                        echo "=== Step 2: Setting up Ansible on bastion ==="
+                        ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no ubuntu@$BASTION_HOST << 'BASTION_SETUP'
+                            set -e
+                            cd ~/ansible-playbook
                             
-                            # Explicitly export AWS credentials for Ansible dynamic inventory plugin
-                            export AWS_ACCESS_KEY_ID
-                            export AWS_SECRET_ACCESS_KEY
+                            # Check if Ansible is already installed
+                            if ! command -v ansible-playbook &> /dev/null; then
+                                echo "Installing Ansible and dependencies..."
+                                sudo apt-get update -qq
+                                sudo apt-get install -y python3-pip python3-venv
+                                python3 -m pip install --user --upgrade pip
+                                python3 -m pip install --user ansible boto3 botocore
+                                
+                                # Add pip user bin to PATH for this session
+                                export PATH="$HOME/.local/bin:$PATH"
+                            else
+                                echo "Ansible already installed"
+                                export PATH="$HOME/.local/bin:$PATH"
+                            fi
+                            
+                            # Verify Ansible installation
+                            ansible --version || python3 -m pip install --user ansible boto3 botocore
+                            export PATH="$HOME/.local/bin:$PATH"
+                            ansible --version
+BASTION_SETUP
+                        echo "Ansible setup completed"
+                        echo ""
+                        
+                        # Step 3: Configure AWS credentials on bastion and run playbook
+                        echo "=== Step 3: Running Ansible Playbook from bastion ==="
+                        echo "This will install SonarQube on private instances"
+                        echo "Pipeline will wait until installation completes..."
+                        echo ""
+                        
+                        # Run ansible-playbook from bastion with AWS credentials
+                        ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no ubuntu@$BASTION_HOST bash << EOF
+                            set -e
+                            cd ~/ansible-playbook
+                            export PATH="\$HOME/.local/bin:\$PATH"
+                            export AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID"
+                            export AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY"
                             export AWS_DEFAULT_REGION=us-east-1
-                            
-                            # Verify AWS credentials are set
-                            if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
-                                echo "ERROR: AWS credentials not set!"
-                                exit 1
-                            fi
-                            
-                            # SSH key is in workspace
-                            SSH_KEY="${WORKSPACE}/.ssh/sonarqube-key.pem"
-                            
-                            if [ ! -f "$SSH_KEY" ]; then
-                                echo "ERROR: SSH key not found at $SSH_KEY"
-                                exit 1
-                            fi
-                            
                             export ANSIBLE_HOST_KEY_CHECKING=False
                             
-                            echo "=========================================="
-                            echo "PRIMARY TASK: Installing SonarQube using Dynamic Inventory"
-                            echo "=========================================="
-                            echo "Using dynamic inventory: aws_ec2.yml"
-                            echo "Target hosts: _sonarqube (discovered via AWS EC2 tags)"
-                            echo "Playbook: site.yml"
+                            echo "=== Discovering instances using dynamic inventory ==="
+                            ansible-inventory -i aws_ec2.yml --list || {
+                                echo "ERROR: Failed to discover instances"
+                                exit 1
+                            }
                             echo ""
                             
-                            # Display dynamic inventory before running
-                            echo "=== Dynamic Inventory Discovery ==="
-                            ansible-inventory -i aws_ec2.yml --list
+                            echo "=== Testing connectivity to private instances ==="
+                            ansible -i aws_ec2.yml _sonarqube -m ping -u ubuntu --private-key=~/.ssh/sonarqube-key.pem || {
+                                echo "ERROR: Cannot reach private instances from bastion"
+                                exit 1
+                            }
+                            echo "Connectivity test passed"
                             echo ""
                             
-                            echo "=== Running Ansible Playbook with Dynamic Inventory ==="
-                            ansible-playbook -i aws_ec2.yml -u ubuntu --private-key="$SSH_KEY" site.yml
+                            echo "=== Running Ansible Playbook ==="
+                            echo "Installing SonarQube on all discovered instances..."
+                            ansible-playbook -i aws_ec2.yml -u ubuntu --private-key=~/.ssh/sonarqube-key.pem site.yml
                             
                             echo ""
-                            echo "SUCCESS: SonarQube installation completed using dynamic inventory"
-                        '''
-                    }
+                            echo "=== Verifying installation ==="
+                            ansible -i aws_ec2.yml _sonarqube -m shell -a "systemctl status sonarqube --no-pager" -u ubuntu --private-key=~/.ssh/sonarqube-key.pem || echo "Service check completed"
+                            
+                            echo ""
+                            echo "SUCCESS: SonarQube installation completed from bastion host"
+EOF
+                        
+                        echo ""
+                        echo "=========================================="
+                        echo "SUCCESS: Installation completed!"
+                        echo "Pipeline waited for Ansible to finish"
+                        echo "=========================================="
+                    '''
                 }
             }
         }

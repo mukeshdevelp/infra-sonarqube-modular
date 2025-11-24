@@ -79,16 +79,17 @@ PRIVATE_IPS_JSON=$(get_json_output "aws_private_instance_ip")
 if [ "$PRIVATE_IPS_JSON" != "[]" ] && [ -n "$PRIVATE_IPS_JSON" ]; then
     # Extract IPs from JSON array using jq if available, otherwise use basic parsing
     if command -v jq &> /dev/null; then
-        PRIVATE_IPS=$(echo "$PRIVATE_IPS_JSON" | jq -r '.[]' | tr '\n' ' ')
+        PRIVATE_IPS=$(echo "$PRIVATE_IPS_JSON" | jq -r '.[]' | tr '\n' ' ' | sed 's/[[:space:]]*$//')
         PRIVATE_IP_ARRAY=$(echo "$PRIVATE_IPS_JSON" | jq -r '.[]')
     else
         # Basic parsing without jq
-        PRIVATE_IPS=$(echo "$PRIVATE_IPS_JSON" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | tr '\n' ' ')
+        PRIVATE_IPS=$(echo "$PRIVATE_IPS_JSON" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | tr '\n' ' ' | sed 's/[[:space:]]*$//')
         PRIVATE_IP_ARRAY=$(echo "$PRIVATE_IPS_JSON" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+')
     fi
     
     if [ -n "$PRIVATE_IPS" ]; then
-        echo "PRIVATE_IPS=$PRIVATE_IPS" >> "$ENV_FILE"
+        # Quote the value to handle spaces properly when sourcing
+        echo "PRIVATE_IPS=\"$PRIVATE_IPS\"" >> "$ENV_FILE"
         echo "Private Instance IPs:" >> "$IP_FILE"
         echo "$PRIVATE_IP_ARRAY" | while read -r ip; do
             if [ -n "$ip" ]; then

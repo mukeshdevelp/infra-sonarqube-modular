@@ -527,3 +527,4 @@ terraform.tfvars
 
 This architecture provides a modular, scalable infrastructure for deploying SonarQube with proper network isolation, security, and high availability.
 
+
