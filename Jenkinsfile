@@ -70,15 +70,12 @@ pipeline {
                     sh '''
                         terraform apply --auto-approve
                         
-                        # Ensure SSH key exists and has correct permissions
-                        if [ -f $WORKSPACE/.ssh/sonarqube-key.pem ]; then
-                            chmod 400 $WORKSPACE/.ssh/sonarqube-key.pem
-                        elif [ -f $WORKSPACE/../.ssh/sonarqube-key.pem ]; then
-                            chmod 400 $WORKSPACE/../.ssh/sonarqube-key.pem
-                        else
-                            echo "ERROR: SSH key not found"
+                        # SSH key is in workspace - ensure it exists and has correct permissions
+                        if [ ! -f $WORKSPACE/.ssh/sonarqube-key.pem ]; then
+                            echo "ERROR: SSH key not found at $WORKSPACE/.ssh/sonarqube-key.pem"
                             exit 1
                         fi
+                        chmod 400 $WORKSPACE/.ssh/sonarqube-key.pem
 
                         echo "infra created"
                     '''
@@ -141,14 +138,12 @@ pipeline {
                         sh '''
                             . $VENV_PATH/bin/activate
                             
-                            # Find SSH key
+                            # SSH key is in workspace
                             SSH_KEY="${WORKSPACE}/.ssh/sonarqube-key.pem"
-                            if [ ! -f "$SSH_KEY" ]; then
-                                SSH_KEY="${WORKSPACE}/../.ssh/sonarqube-key.pem"
-                            fi
                             
                             if [ ! -f "$SSH_KEY" ]; then
                                 echo "ERROR: SSH key not found at $SSH_KEY"
+                                echo "Expected location: ${WORKSPACE}/.ssh/sonarqube-key.pem"
                                 exit 1
                             fi
                             
@@ -203,10 +198,12 @@ pipeline {
                         sh '''
                             . $VENV_PATH/bin/activate
                             
-                            # Find SSH key
+                            # SSH key is in workspace
                             SSH_KEY="${WORKSPACE}/.ssh/sonarqube-key.pem"
+                            
                             if [ ! -f "$SSH_KEY" ]; then
-                                SSH_KEY="${WORKSPACE}/../.ssh/sonarqube-key.pem"
+                                echo "ERROR: SSH key not found at $SSH_KEY"
+                                exit 1
                             fi
                             
                             export ANSIBLE_HOST_KEY_CHECKING=False
