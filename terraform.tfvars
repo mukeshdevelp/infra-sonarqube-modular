@@ -11,6 +11,9 @@ private_subnet_b_az = "us-east-1b"
 whitelisted_ip = ["0.0.0.0/0" , "103.87.45.36/32" , "173.0.0.0/16"]
 peered_vpc_cidr = "173.0.0.0/16"
 key_pair_name = "sonarqube-key"
+# ec2_key_location is set via TF_VAR_ec2_key_location environment variable in Jenkins pipeline
+# In Jenkins: TF_VAR_ec2_key_location="${WORKSPACE}/.ssh/sonarqube-key.pem"
+# For local use, use relative path:
 ec2_key_location = ".ssh/sonarqube-key.pem"
 all_hosts = ["0.0.0.0/0"]
 instance_size_small = "t2.micro"

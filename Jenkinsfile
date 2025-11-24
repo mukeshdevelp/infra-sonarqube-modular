@@ -35,6 +35,8 @@ pipeline {
                 ]]) {
                     sh '''
                         aws s3 ls
+                        # Set WORKSPACE variable for Terraform
+                        export TF_VAR_ec2_key_location="${WORKSPACE}/.ssh/sonarqube-key.pem"
                         terraform init --reconfigure
                         echo "terraform initialized"
                     '''
@@ -44,19 +46,34 @@ pipeline {
 
         stage('Terraform Formatting') {
             steps {
-                sh 'terraform fmt && echo "formatted terraform code"'
+                sh '''
+                    export TF_VAR_ec2_key_location="${WORKSPACE}/.ssh/sonarqube-key.pem"
+                    terraform fmt && echo "formatted terraform code"
+                '''
             }
         }
 
         stage('Terraform Validate') {
             steps {
-                sh 'terraform validate && echo "validated terraform code"'
+                sh '''
+                    export TF_VAR_ec2_key_location="${WORKSPACE}/.ssh/sonarqube-key.pem"
+                    terraform validate && echo "validated terraform code"
+                '''
             }
         }
 
         stage('Terraform Plan') {
             steps {
-                sh 'terraform plan && echo "planning terraform code"'
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws-credentials',
+                    accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                ]]) {
+                    sh '''
+                        export TF_VAR_ec2_key_location="${WORKSPACE}/.ssh/sonarqube-key.pem"
+                        terraform plan && echo "planning terraform code"
+                    '''
+                }
             }
         }
 
@@ -68,6 +85,7 @@ pipeline {
                     secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
                 ]]) {
                     sh '''
+                        export TF_VAR_ec2_key_location="${WORKSPACE}/.ssh/sonarqube-key.pem"
                         terraform apply --auto-approve
                         
                         # SSH key is in workspace - ensure it exists and has correct permissions
