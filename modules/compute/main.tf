@@ -9,52 +9,28 @@ data "aws_ami" "ubuntu" {
   }
   
 }
-# Image Builder EC2 - Public subnet for Ansible installation
-# This EC2 will be used to build the SonarQube AMI
-resource "aws_instance" "image_builder_ec2" {
+# bastion host
+resource "aws_instance" "public_ec2" {
   ami                    = data.aws_ami.ubuntu.id
-  instance_type          = var.sonarqube_instance_size  # Use sonarqube size for image building
+  instance_type          = var.small_instance_size
+  # change here
   subnet_id              = var.public_subnet_a_id
   vpc_security_group_ids = [var.public_security_group]
   key_name               = var.key_name
   associate_public_ip_address = true
 
   tags = {
-    Name = "sonarqube-image-builder"
-    type = "image-builder"
-    env  = "sonarqube"
-    role = "ami-builder"
+    Name = "public-ec2-instance"
+    type = "bastion host"
   }
  
 }
 
 
-# AMI Creation from Image Builder EC2
-# This will be created AFTER Ansible installs SonarQube on image_builder_ec2
-# Only create AMI when create_ami is true (set after Ansible installation)
-resource "aws_ami_from_instance" "sonarqube_ami" {
-  count                = var.create_ami ? 1 : 0
-  name                 = "sonarqube-ami-${formatdate("YYYY-MM-DD-HH-mm-ss", timestamp())}"
-  source_instance_id   = aws_instance.image_builder_ec2.id
-  snapshot_without_reboot = false  # Reboot to ensure clean state
-  
-  depends_on = [aws_instance.image_builder_ec2]
-  
-  tags = {
-    Name = "SonarQube Golden Image"
-    env  = "sonarqube"
-  }
-  
-  lifecycle {
-    create_before_destroy = true
-  }
-}
-
-# Launch Template for SonarQube instances using the custom AMI
+# Launch Template for SonarQube instances (can be used with ASG later)
 resource "aws_launch_template" "sonarqube_lt" {
-  count                  = var.create_ami ? 1 : 0
   name_prefix            = "sonarqube-lt-"
-  image_id               = aws_ami_from_instance.sonarqube_ami[0].id  # Use custom AMI instead of base Ubuntu
+  image_id               = data.aws_ami.ubuntu.id
   instance_type          = var.sonarqube_instance_size
   key_name               = var.key_name
   vpc_security_group_ids = var.private_sg
@@ -64,55 +40,20 @@ resource "aws_launch_template" "sonarqube_lt" {
     tags = {
       Name = "sonarqube-instance"
       env  = "sonarqube"
-      role = "sonarqube-postgres"
+      role = "sonarqube"
     }
   }
-  
-  depends_on = [aws_ami_from_instance.sonarqube_ami]
 }
 
-# Stop Image Builder EC2 after AMI and Launch Template are created
-# This saves costs since the instance is no longer needed after AMI creation
-resource "null_resource" "stop_image_builder" {
-  count = var.create_ami ? 1 : 0
-  
-  # Stop the instance after Launch Template is created
-  # Triggers when Launch Template ID changes (after creation)
-  triggers = {
-    launch_template_id = aws_launch_template.sonarqube_lt[0].id
-    ami_id             = aws_ami_from_instance.sonarqube_ami[0].id
-    instance_id        = aws_instance.image_builder_ec2.id
-  }
-  
-  # Use AWS CLI to stop the instance (AWS credentials from Jenkins environment)
-  # Jenkins sets AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY via withCredentials
-  provisioner "local-exec" {
-    command = <<-EOT
-      echo "Stopping Image Builder EC2 after AMI and Launch Template creation..."
-      aws ec2 stop-instances \
-        --instance-ids ${aws_instance.image_builder_ec2.id} \
-        --region us-east-1 \
-        || echo "Warning: Failed to stop instance (may already be stopped or credentials not set)"
-      echo "Image Builder EC2 stop command executed"
-    EOT
-  }
-  
-  depends_on = [
-    aws_ami_from_instance.sonarqube_ami,
-    aws_launch_template.sonarqube_lt
-  ]
-}
-
-# Private EC2 instances launched using Launch Template (with SonarQube pre-installed from AMI)
-# These instances are created AFTER the AMI is built from image_builder_ec2
-# They will only be created when the AMI exists (after Ansible installation)
+# Direct EC2 instances for Ansible installation
+# Each instance will run BOTH SonarQube (port 9000) and PostgreSQL (port 5432) on the same server
+# Jenkins pipeline will install both services via Ansible roles
 #
 # Instance Placement:
 # - private_server_a → Private Subnet 1a (us-east-1a, 10.0.3.0/24)
 # - private_server_b → Private Subnet 1b (us-east-1b, 10.0.4.0/24)
 resource "aws_instance" "private_server_a" {
-  count                  = var.create_private_instances && var.create_ami ? 1 : 0  # Only create after AMI is ready
-  ami                    = aws_ami_from_instance.sonarqube_ami[0].id  # Use custom AMI with SonarQube
+  ami                    = data.aws_ami.ubuntu.id
   instance_type          = var.sonarqube_instance_size
   subnet_id              = var.private_subnets[0]  # Private Subnet 1a (10.0.3.0/24)
   vpc_security_group_ids = var.private_sg
@@ -124,15 +65,11 @@ resource "aws_instance" "private_server_a" {
     env  = "sonarqube"
     role = "sonarqube-postgres"  # Both services on same instance
     subnet = "private-subnet-1a"
-    launched_from = "launch-template"
   }
-  
-  depends_on = [aws_launch_template.sonarqube_lt]
 }
 
 resource "aws_instance" "private_server_b" {
-  count                  = var.create_private_instances && var.create_ami ? 1 : 0  # Only create after AMI is ready
-  ami                    = aws_ami_from_instance.sonarqube_ami[0].id  # Use custom AMI with SonarQube
+  ami                    = data.aws_ami.ubuntu.id
   instance_type          = var.sonarqube_instance_size
   subnet_id              = var.private_subnets[1]  # Private Subnet 1b (10.0.4.0/24)
   vpc_security_group_ids = var.private_sg
@@ -144,25 +81,18 @@ resource "aws_instance" "private_server_b" {
     env  = "sonarqube"
     role = "sonarqube-postgres"  # Both services on same instance
     subnet = "private-subnet-1b"
-    launched_from = "launch-template"
   }
-  
-  depends_on = [aws_launch_template.sonarqube_lt]
 }
-
 # Attach private instances to ALB target group (SonarQube listens on port 9000)
-# Only attach when both instances exist (require both create_ami and create_private_instances)
 resource "aws_lb_target_group_attachment" "private_a_attachment" {
-  count            = var.create_private_instances && var.create_ami ? 1 : 0
   target_group_arn = var.target_group_arn
-  target_id        = aws_instance.private_server_a[0].id
+  target_id        = aws_instance.private_server_a.id
   port             = 9000
 }
 
 resource "aws_lb_target_group_attachment" "private_b_attachment" {
-  count            = var.create_private_instances && var.create_ami ? 1 : 0
   target_group_arn = var.target_group_arn
-  target_id        = aws_instance.private_server_b[0].id
+  target_id        = aws_instance.private_server_b.id
   port             = 9000
 }
 # Launch template is available above for future ASG use

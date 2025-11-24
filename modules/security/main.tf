@@ -4,31 +4,29 @@ resource "aws_security_group" "public_sg" {
   name        = "public-sg"
   description = "Allow HTTP, HTTPS, SSH"
   vpc_id      = var.vpc_id
-  # HTTP from allowed CIDRs only (not 0.0.0.0/0)
+  # tcp for everyone
   ingress {
-    description = "HTTP from allowed CIDRs"
-    from_port   = 80
+      from_port   = 80
     to_port     = 80
     protocol    = "tcp"
-    # Use allowed_http_https_cidrs if provided, otherwise use allowed_host
-    cidr_blocks = length(var.allowed_http_https_cidrs) > 0 ? var.allowed_http_https_cidrs : var.allowed_host
+  
+    cidr_blocks = var.everywhere_host
   }
-  # HTTPS from allowed CIDRs only (not 0.0.0.0/0)
+  # http for every one
   ingress {
-    description = "HTTPS from allowed CIDRs"
+    description = "HTTPS"
     from_port   = 443
     to_port     = 443
     protocol    = "tcp"
-    # Use allowed_http_https_cidrs if provided, otherwise use allowed_host
-    cidr_blocks = length(var.allowed_http_https_cidrs) > 0 ? var.allowed_http_https_cidrs : var.allowed_host
+    cidr_blocks = var.everywhere_host
   }
-  # ssh from anywhere (0.0.0.0/0) - allows SSH from any IP
+  # ssh for allowed hosts
   ingress {
     description = "SSH"
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = var.allowed_host
   }
   # all rgress
   egress {
@@ -146,39 +144,58 @@ resource "aws_network_acl" "public_nacl" {
   vpc_id = var.vpc_id
   # Allow SSH from whitelisted IPs, HTTP/HTTPS from everywhere and allow all egress
   
-  # SSH from anywhere (0.0.0.0/0) - allows SSH from any IP
+  # allowed host ingress
   ingress {
     protocol   = "tcp"
-    rule_no    = 110
+    rule_no    = 110 
     action     = "allow"
-    cidr_block = "0.0.0.0/0"
+    cidr_block = var.allowed_host[0]
     from_port  = 22
     to_port    = 22
   }
-  # HTTP ingress from allowed CIDRs only (not 0.0.0.0/0)
-  # Create separate rules for each allowed CIDR (NACLs don't support lists)
-  dynamic "ingress" {
-    for_each = { for idx, cidr in (length(var.allowed_http_https_cidrs) > 0 ? var.allowed_http_https_cidrs : var.allowed_host) : idx => cidr }
-    content {
-      protocol   = "tcp"
-      rule_no    = 120 + ingress.key  # 120, 121, 122, etc.
-      action     = "allow"
-      cidr_block = ingress.value
-      from_port  = 80
-      to_port    = 80
-    }
+  # peer vpc ssh
+  ingress {
+    protocol   = "tcp"
+    rule_no    = 1700
+    action     = "allow"
+    cidr_block = var.peered_vpc_cidr
+    from_port  = 22
+    to_port    = 22
   }
-  # HTTPS ingress from allowed CIDRs only (not 0.0.0.0/0)
-  dynamic "ingress" {
-    for_each = { for idx, cidr in (length(var.allowed_http_https_cidrs) > 0 ? var.allowed_http_https_cidrs : var.allowed_host) : idx => cidr }
-    content {
-      protocol   = "tcp"
-      rule_no    = 130 + ingress.key  # 130, 131, 132, etc.
-      action     = "allow"
-      cidr_block = ingress.value
-      from_port  = 443
-      to_port    = 443
-    }
+  # vpc cidr ssh
+  ingress {
+    protocol   = "tcp"
+    rule_no    = 1800
+    action     = "allow"
+    cidr_block = var.vpc_cidr_block
+    from_port  = 22
+    to_port    = 22
+  }
+  # allowed host ssh
+  ingress {
+    protocol   = "tcp"
+    rule_no    = 2000
+    action     = "allow"
+    cidr_block = var.allowed_host[0]
+    from_port  = 22
+    to_port    = 22
+  }
+  # tcp 80 and 443 ingress
+  ingress {
+    protocol   = "tcp"
+    rule_no    = 120
+    action     = "allow"
+    cidr_block = "0.0.0.0/0"
+    from_port  = 80
+    to_port    = 80
+  }
+  ingress {
+    protocol   = "tcp"
+    rule_no    = 130
+    action     = "allow"
+    cidr_block = "0.0.0.0/0"
+    from_port  = 443
+    to_port    = 443
   }
   # all egress (catch-all)
   egress {
@@ -216,93 +233,48 @@ resource "aws_network_acl" "public_nacl" {
     from_port  = 53
     to_port    = 53
   }
-  # ICMP ingress (ping replies) from VPC and peered VPC only
+  # ICMP ingress (ping replies)
   ingress {
     protocol   = "icmp"
     rule_no    = 200
     action     = "allow"
-    cidr_block = var.vpc_cidr_block
+    cidr_block = "0.0.0.0/0"
     from_port  = 0
     to_port    = 0
   }
-  # ICMP ingress from peered VPC
-  ingress {
-    protocol   = "icmp"
-    rule_no    = 201
-    action     = "allow"
-    cidr_block = var.peered_vpc_cidr
-    from_port  = 0
-    to_port    = 0
-  }
-  # DNS ingress (UDP port 53) - for DNS responses from VPC and peered VPC
+  # DNS ingress (UDP port 53) - for DNS responses
   ingress {
     protocol   = "udp"
     rule_no    = 210
     action     = "allow"
-    cidr_block = var.vpc_cidr_block
+    cidr_block = "0.0.0.0/0"
     from_port  = 53
     to_port    = 53
   }
-  # DNS ingress (UDP port 53) from peered VPC
-  ingress {
-    protocol   = "udp"
-    rule_no    = 211
-    action     = "allow"
-    cidr_block = var.peered_vpc_cidr
-    from_port  = 53
-    to_port    = 53
-  }
-  # DNS ingress (TCP port 53) - for DNS responses from VPC and peered VPC
+  # DNS ingress (TCP port 53) - for DNS responses
   ingress {
     protocol   = "tcp"
     rule_no    = 220
     action     = "allow"
-    cidr_block = var.vpc_cidr_block
+    cidr_block = "0.0.0.0/0"
     from_port  = 53
     to_port    = 53
   }
-  # DNS ingress (TCP port 53) from peered VPC
-  ingress {
-    protocol   = "tcp"
-    rule_no    = 221
-    action     = "allow"
-    cidr_block = var.peered_vpc_cidr
-    from_port  = 53
-    to_port    = 53
-  }
-  # TCP ingress on ephemeral ports (1024-65535) - for return traffic from VPC and peered VPC only
+  # TCP ingress on ephemeral ports (1024-65535) - for return traffic from outbound connections
   ingress {
     protocol   = "tcp"
     rule_no    = 230
     action     = "allow"
-    cidr_block = var.vpc_cidr_block
+    cidr_block = "0.0.0.0/0"
     from_port  = 1024
     to_port    = 65535
   }
-  # TCP ephemeral ports from peered VPC
-  ingress {
-    protocol   = "tcp"
-    rule_no    = 231
-    action     = "allow"
-    cidr_block = var.peered_vpc_cidr
-    from_port  = 1024
-    to_port    = 65535
-  }
-  # UDP ingress on ephemeral ports (1024-65535) - for return traffic from VPC and peered VPC only
+  # UDP ingress on ephemeral ports (1024-65535) - for return traffic from outbound connections
   ingress {
     protocol   = "udp"
     rule_no    = 240
     action     = "allow"
-    cidr_block = var.vpc_cidr_block
-    from_port  = 1024
-    to_port    = 65535
-  }
-  # UDP ephemeral ports from peered VPC
-  ingress {
-    protocol   = "udp"
-    rule_no    = 241
-    action     = "allow"
-    cidr_block = var.peered_vpc_cidr
+    cidr_block = "0.0.0.0/0"
     from_port  = 1024
     to_port    = 65535
   }
@@ -416,44 +388,6 @@ resource "aws_network_acl" "private_nacl" {
     from_port  = 5432
     to_port    = 5432
   }
-  # Ephemeral ports ingress from VPC only (for return traffic from outbound HTTPS/HTTP connections)
-  # This is required for apt update to work - NACLs are stateless
-  # Restricted to VPC CIDR instead of 0.0.0.0/0 for security
-  ingress {
-    protocol   = "tcp"
-    rule_no    = 140
-    action     = "allow"
-    cidr_block = var.vpc_cidr_block
-    from_port  = 1024
-    to_port    = 65535
-  }
-  # TCP ephemeral ports from peered VPC
-  ingress {
-    protocol   = "tcp"
-    rule_no    = 141
-    action     = "allow"
-    cidr_block = var.peered_vpc_cidr
-    from_port  = 1024
-    to_port    = 65535
-  }
-  # UDP ephemeral ports ingress from VPC only (for DNS responses)
-  ingress {
-    protocol   = "udp"
-    rule_no    = 142
-    action     = "allow"
-    cidr_block = var.vpc_cidr_block
-    from_port  = 1024
-    to_port    = 65535
-  }
-  # UDP ephemeral ports from peered VPC
-  ingress {
-    protocol   = "udp"
-    rule_no    = 143
-    action     = "allow"
-    cidr_block = var.peered_vpc_cidr
-    from_port  = 1024
-    to_port    = 65535
-  }
   # all allow egress
   egress {
     protocol   = "-1"
@@ -553,12 +487,12 @@ resource "aws_network_acl" "private_nacl" {
     from_port  = 0
     to_port    = 0
   }
-  # ICMP ingress (ping replies) from peered VPC
+  # ICMP ingress (ping replies) from everywhere (for general connectivity)
   ingress {
     protocol   = "icmp"
-    rule_no    = 202
+    rule_no    = 201
     action     = "allow"
-    cidr_block = var.peered_vpc_cidr
+    cidr_block = "0.0.0.0/0"
     from_port  = 0
     to_port    = 0
   }

@@ -17,9 +17,17 @@ resource "aws_lb_target_group" "tg" {
   port     = 9000
   protocol = "HTTP"
   vpc_id   = var.vpc_id
+
   health_check {
-    path = "/"
-    port = "9000"
+    enabled             = true
+    healthy_threshold   = 2
+    unhealthy_threshold = 5  # Increased to allow more time for SonarQube to start (5 * 30s = 2.5 minutes grace period)
+    timeout             = 10  # Increased timeout for SonarQube startup
+    interval            = 30
+    path                = "/api/system/status"
+    port                = "9000"
+    protocol            = "HTTP"
+    matcher             = "200"
   }
   tags = {
     access = "through alb"
@@ -33,6 +41,7 @@ resource "aws_lb_listener" "listener" {
   load_balancer_arn = aws_lb.alb.arn
   port              = 80
   protocol          = "HTTP"
+
   default_action {
     type             = "forward"
     target_group_arn = aws_lb_target_group.tg.arn

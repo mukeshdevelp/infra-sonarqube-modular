@@ -17,11 +17,11 @@ NC='\033[0m' # No Color
 # Get Image Builder IP
 IMAGE_BUILDER_IP=$(cd /home/mukesh/Desktop/infra-sonarqube-modular && terraform output -raw image_builder_public_ip 2>/dev/null || echo "")
 if [ -z "$IMAGE_BUILDER_IP" ]; then
-    echo "❌ ERROR: Could not get Image Builder IP. Make sure infrastructure is created."
+    echo "ERROR: Could not get Image Builder IP. Make sure infrastructure is created."
     exit 1
 fi
 
-echo -e "${GREEN}✅ Image Builder EC2 IP: $IMAGE_BUILDER_IP${NC}"
+echo -e "${GREEN}SUCCESS: Image Builder EC2 IP: $IMAGE_BUILDER_IP${NC}"
 echo ""
 
 # PHASE 2: Install SonarQube on Image Builder EC2
@@ -39,14 +39,14 @@ if [ ! -d "venv" ]; then
 fi
 
 source venv/bin/activate
-echo "✅ Virtual environment activated"
+echo "SUCCESS: Virtual environment activated"
 
 # Install dependencies
 echo "Installing Ansible dependencies..."
 pip install --upgrade pip --quiet
 pip install boto3 botocore ansible --quiet
 ansible-galaxy collection install amazon.aws --quiet
-echo "✅ Dependencies installed"
+echo "SUCCESS: Dependencies installed"
 
 # Set environment variables
 export WORKSPACE=$(pwd)
@@ -66,7 +66,7 @@ ansible-playbook -i aws_ec2.yml site.yml \
     -v
 
 echo ""
-echo -e "${GREEN}✅ SonarQube installed on Image Builder EC2!${NC}"
+echo -e "${GREEN}SUCCESS: SonarQube installed on Image Builder EC2!${NC}"
 echo ""
 
 # PHASE 3: Create AMI and Launch Private Instances
@@ -86,18 +86,18 @@ terraform apply -auto-approve \
 # Get AMI ID
 AMI_ID=$(terraform output -raw sonarqube_ami_id 2>/dev/null || echo "")
 if [ -z "$AMI_ID" ] || [ "$AMI_ID" = "AMI not created" ]; then
-    echo "❌ ERROR: Could not get AMI ID"
+    echo "ERROR: Could not get AMI ID"
     exit 1
 fi
 
 echo ""
-echo -e "${GREEN}✅ AMI created: $AMI_ID${NC}"
+echo -e "${GREEN}SUCCESS: AMI created: $AMI_ID${NC}"
 echo ""
 
 # Step 2: Wait for AMI to be available
 echo "Step 2: Waiting for AMI to be available (this may take 2-5 minutes)..."
-aws ec2 wait image-available --image-ids $AMI_ID || echo "⚠️  AMI may still be creating"
-echo -e "${GREEN}✅ AMI is available${NC}"
+aws ec2 wait image-available --image-ids $AMI_ID || echo "WARNING: AMI may still be creating"
+echo -e "${GREEN}SUCCESS: AMI is available${NC}"
 echo ""
 
 # Step 3: Launch private instances
@@ -111,7 +111,7 @@ terraform apply -auto-approve \
     -target=module.compute.aws_lb_target_group_attachment.private_b_attachment
 
 echo ""
-echo -e "${GREEN}✅ Private instances launched!${NC}"
+echo -e "${GREEN}SUCCESS: Private instances launched!${NC}"
 echo ""
 
 # Step 4: Display results
@@ -131,6 +131,6 @@ echo ""
 echo "Launch Template ID:"
 terraform output -raw launch_template_id
 echo ""
-echo -e "${GREEN}✅ Access SonarQube at: http://$(terraform output -raw alb_dns_name)${NC}"
+echo -e "${GREEN}SUCCESS: Access SonarQube at: http://$(terraform output -raw alb_dns_name)${NC}"
 echo ""
 

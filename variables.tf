@@ -115,18 +115,6 @@ variable "alb_listener" {
   type        = list(string)
 }
 
-variable "create_ami" {
-  description = "Whether to create AMI from image builder (set to true after Ansible installs SonarQube)"
-  type        = bool
-  default     = false
-}
-
-variable "create_private_instances" {
-  description = "Whether to create private instances (set to true after AMI is created with SonarQube)"
-  type        = bool
-  default     = false
-}
-
 
 variable "peered_vpc_cidr" {
   type        = string
