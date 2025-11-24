@@ -505,6 +505,24 @@ resource "aws_network_acl" "private_nacl" {
     from_port  = 0
     to_port    = 0
   }
+  # TCP ingress on ephemeral ports (1024-65535) - for return traffic from outbound connections via NAT Gateway
+  ingress {
+    protocol   = "tcp"
+    rule_no    = 250
+    action     = "allow"
+    cidr_block = "0.0.0.0/0"
+    from_port  = 1024
+    to_port    = 65535
+  }
+  # UDP ingress on ephemeral ports (1024-65535) - for return traffic from outbound connections via NAT Gateway
+  ingress {
+    protocol   = "udp"
+    rule_no    = 260
+    action     = "allow"
+    cidr_block = "0.0.0.0/0"
+    from_port  = 1024
+    to_port    = 65535
+  }
   tags = {
     Name = "private-nacl"
     attached_to = "private subnet a and b"

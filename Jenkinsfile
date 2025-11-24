@@ -138,14 +138,14 @@ pipeline {
 
             # Ansible collection
             ansible-galaxy collection install amazon.aws
-
+            
             echo "Dependencies installed successfully"
         '''
     }
-}
+}       
 
-        
-        stage('Verify SSH Connectivity') {
+
+        stage('pinging the instances') {
             steps {
                 withEnv(["PATH=${env.WORKSPACE}/venv/bin:${env.PATH}"]) {
                     withCredentials([[$class: 'AmazonWebServicesCredentialsBinding',
@@ -161,62 +161,51 @@ pipeline {
                             export AWS_SECRET_ACCESS_KEY
                             export AWS_DEFAULT_REGION=us-east-1
                             
-                            # Verify AWS credentials are set
-                            if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
-                                echo "ERROR: AWS credentials not set!"
+                            # SSH key path - use SSH_KEY_PATH from environment block
+                            SSH_KEY="$SSH_KEY_PATH"
+                            echo "WORKSPACE: ${WORKSPACE}"
+                            echo "SSH_KEY_PATH: ${SSH_KEY_PATH}"
+                            echo "SSH_KEY: $SSH_KEY"
+                            
+                            # Fix directory and key permissions
+                            SSH_DIR="$(dirname "$SSH_KEY")"
+                            if [ ! -d "$SSH_DIR" ]; then
+                                echo "ERROR: .ssh directory not found at $SSH_DIR"
                                 exit 1
                             fi
                             
-                            # SSH key is in workspace
-                            SSH_KEY="${WORKSPACE}/.ssh/sonarqube-key.pem"
+                            # Fix .ssh directory permissions (must be 700)
+                            chmod 700 "$SSH_DIR"
                             
+                            # Check if key exists
                             if [ ! -f "$SSH_KEY" ]; then
                                 echo "ERROR: SSH key not found at $SSH_KEY"
-                                echo "Expected location: ${WORKSPACE}/.ssh/sonarqube-key.pem"
+                                echo "Listing .ssh directory contents:"
+                                ls -la "$SSH_DIR" || echo "Cannot list $SSH_DIR"
                                 exit 1
                             fi
                             
+                            # Fix key file permissions (must be 400)
                             chmod 400 "$SSH_KEY"
+                            echo "SSH key permissions fixed: $(ls -l "$SSH_KEY" | awk '{print $1}')"
+                            
                             export ANSIBLE_HOST_KEY_CHECKING=False
                             
                             # Display inventory
                             echo "=== Discovered Instances ==="
+                            ansible-inventory -i aws_ec2.yml --graph
                             ansible-inventory -i aws_ec2.yml --list
                             
-                            # Check if instances are in inventory
-                            if ! ansible-inventory -i aws_ec2.yml --list 2>/dev/null | grep -q "_sonarqube"; then
-                                echo ""
-                                echo "ERROR: No instances found in inventory with tag:env=sonarqube"
-                                echo "Pipeline will fail - instances must be available in inventory"
-                                echo ""
-                                echo "Possible causes:"
-                                echo "  1. Instances not created yet (check Terraform apply stage)"
-                                echo "  2. Instances not in 'running' state"
-                                echo "  3. Instances don't have tag:env=sonarqube"
-                                echo "  4. AWS credentials not working for dynamic inventory"
-                                echo "  5. Region mismatch (inventory expects us-east-1)"
-                                exit 1
-                            fi
-                            
-                            # Test SSH connectivity - FAIL IMMEDIATELY if unavailable (NO RETRIES)
+                            # Ping hosts using ansible
+                            echo ""
                             echo "=== Testing SSH Connectivity ==="
-                            echo "If SSH connectivity fails, pipeline will fail immediately"
-                            if ! ansible -i aws_ec2.yml _sonarqube -m ping -u ubuntu --private-key="$SSH_KEY" --timeout=30; then
-                                echo "ERROR: SSH connectivity failed. Pipeline will fail."
-                                echo "Check:"
-                                echo "  1. Security groups allow SSH from Jenkins server"
-                                echo "  2. Instances are running and have public/private IPs"
-                                echo "  3. SSH key is correct"
-                                echo "  4. Network connectivity (bastion host if using private IPs)"
-                                exit 1
-                            fi
-                            
-                            echo "SUCCESS: SSH connectivity verified"
+                            ansible -i aws_ec2.yml _sonarqube -m ping -u ubuntu --private-key="$SSH_KEY" 
                         '''
                     }
                 }
             }
         }
+        
         
         stage('Install SonarQube using Dynamic Inventory') {
             steps {
