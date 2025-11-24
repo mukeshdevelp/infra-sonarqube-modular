@@ -156,6 +156,17 @@ pipeline {
                         sh '''
                             . $VENV_PATH/bin/activate
                             
+                            # Explicitly export AWS credentials for Ansible dynamic inventory plugin
+                            export AWS_ACCESS_KEY_ID
+                            export AWS_SECRET_ACCESS_KEY
+                            export AWS_DEFAULT_REGION=us-east-1
+                            
+                            # Verify AWS credentials are set
+                            if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
+                                echo "ERROR: AWS credentials not set!"
+                                exit 1
+                            fi
+                            
                             # SSH key is in workspace
                             SSH_KEY="${WORKSPACE}/.ssh/sonarqube-key.pem"
                             
@@ -168,28 +179,30 @@ pipeline {
                             chmod 400 "$SSH_KEY"
                             export ANSIBLE_HOST_KEY_CHECKING=False
                             
-                            # Wait for instances to appear in inventory (max 2 minutes)
-                            echo "Waiting for instances to appear in dynamic inventory..."
-                            MAX_WAIT=120
-                            ELAPSED=0
-                            while [ $ELAPSED -lt $MAX_WAIT ]; do
-                                if ansible-inventory -i aws_ec2.yml --list 2>/dev/null | grep -q "_sonarqube"; then
-                                    echo "Instances found in inventory"
-                                    break
-                                fi
-                                echo "Waiting for instances... (${ELAPSED}s/${MAX_WAIT}s)"
-                                sleep 10
-                                ELAPSED=$((ELAPSED + 10))
-                            done
-                            
                             # Display inventory
                             echo "=== Discovered Instances ==="
                             ansible-inventory -i aws_ec2.yml --list
                             
-                            # Test SSH connectivity ONCE - fail immediately if it doesn't work
+                            # Check if instances are in inventory
+                            if ! ansible-inventory -i aws_ec2.yml --list 2>/dev/null | grep -q "_sonarqube"; then
+                                echo ""
+                                echo "ERROR: No instances found in inventory with tag:env=sonarqube"
+                                echo "Pipeline will fail - instances must be available in inventory"
+                                echo ""
+                                echo "Possible causes:"
+                                echo "  1. Instances not created yet (check Terraform apply stage)"
+                                echo "  2. Instances not in 'running' state"
+                                echo "  3. Instances don't have tag:env=sonarqube"
+                                echo "  4. AWS credentials not working for dynamic inventory"
+                                echo "  5. Region mismatch (inventory expects us-east-1)"
+                                exit 1
+                            fi
+                            
+                            # Test SSH connectivity - FAIL IMMEDIATELY if unavailable (NO RETRIES)
                             echo "=== Testing SSH Connectivity ==="
+                            echo "If SSH connectivity fails, pipeline will fail immediately"
                             if ! ansible -i aws_ec2.yml _sonarqube -m ping -u ubuntu --private-key="$SSH_KEY" --timeout=30; then
-                                echo "ERROR: SSH connectivity failed. Cannot connect to instances."
+                                echo "ERROR: SSH connectivity failed. Pipeline will fail."
                                 echo "Check:"
                                 echo "  1. Security groups allow SSH from Jenkins server"
                                 echo "  2. Instances are running and have public/private IPs"
@@ -215,6 +228,17 @@ pipeline {
                     ]]) {
                         sh '''
                             . $VENV_PATH/bin/activate
+                            
+                            # Explicitly export AWS credentials for Ansible dynamic inventory plugin
+                            export AWS_ACCESS_KEY_ID
+                            export AWS_SECRET_ACCESS_KEY
+                            export AWS_DEFAULT_REGION=us-east-1
+                            
+                            # Verify AWS credentials are set
+                            if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
+                                echo "ERROR: AWS credentials not set!"
+                                exit 1
+                            fi
                             
                             # SSH key is in workspace
                             SSH_KEY="${WORKSPACE}/.ssh/sonarqube-key.pem"
