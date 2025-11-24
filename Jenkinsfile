@@ -1,3 +1,4 @@
+//final ver
 pipeline {
     agent any
     // setting the environment like aws creds, ssh key path
