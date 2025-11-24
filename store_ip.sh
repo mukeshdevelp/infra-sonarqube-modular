@@ -52,6 +52,17 @@ else
     echo "BASTION_PUBLIC_IP=N/A" >> "$ENV_FILE"
 fi
 
+# Get Bastion Public DNS
+BASTION_DNS=$(get_output "bastion_public_dns")
+if [ "$BASTION_DNS" != "N/A" ] && [ -n "$BASTION_DNS" ]; then
+    echo "BASTION_PUBLIC_DNS=$BASTION_DNS" >> "$ENV_FILE"
+    echo "Bastion Public DNS: $BASTION_DNS" >> "$IP_FILE"
+    echo "SUCCESS: Bastion DNS stored: $BASTION_DNS"
+else
+    echo "WARNING: Bastion DNS not available yet"
+    echo "BASTION_PUBLIC_DNS=N/A" >> "$ENV_FILE"
+fi
+
 # Get Image Builder Public IP
 IMAGE_BUILDER_IP=$(get_output "image_builder_public_ip")
 if [ "$IMAGE_BUILDER_IP" != "N/A" ] && [ -n "$IMAGE_BUILDER_IP" ]; then

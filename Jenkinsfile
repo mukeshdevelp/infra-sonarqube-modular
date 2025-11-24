@@ -110,6 +110,49 @@ pipeline {
             }
         }
 
+        stage('ssh key permissions'){
+            steps {
+                sh '''
+                    # Fix SSH key permissions
+                    chmod 400 $SSH_KEY_PATH
+                    
+                    # Source the IPs from the stored environment file
+                    if [ -f "${WORKSPACE}/ips.env" ]; then
+                        source "${WORKSPACE}/ips.env"
+                        echo "Bastion IP from stored file: ${BASTION_PUBLIC_IP}"
+                        echo "Bastion DNS from stored file: ${BASTION_PUBLIC_DNS}"
+                    else
+                        # Fallback: Get bastion IP/DNS directly from Terraform output
+                        BASTION_PUBLIC_IP=$(terraform output -raw bastion_public_ip 2>/dev/null || echo "")
+                        BASTION_PUBLIC_DNS=$(terraform output -raw bastion_public_dns 2>/dev/null || echo "")
+                        echo "Bastion IP from Terraform output: ${BASTION_PUBLIC_IP}"
+                        echo "Bastion DNS from Terraform output: ${BASTION_PUBLIC_DNS}"
+                    fi
+                    
+                    # Prefer DNS over IP (DNS is more stable if IP changes)
+                    if [ -n "$BASTION_PUBLIC_DNS" ] && [ "$BASTION_PUBLIC_DNS" != "N/A" ]; then
+                        BASTION_HOST="$BASTION_PUBLIC_DNS"
+                        echo "Using Bastion DNS: ${BASTION_HOST}"
+                    elif [ -n "$BASTION_PUBLIC_IP" ] && [ "$BASTION_PUBLIC_IP" != "N/A" ]; then
+                        BASTION_HOST="$BASTION_PUBLIC_IP"
+                        echo "Using Bastion IP: ${BASTION_HOST}"
+                    else
+                        echo "ERROR: Bastion public IP/DNS not available"
+                        exit 1
+                    fi
+                    
+                    # scp to bastion host
+                    echo "Copying SSH key to bastion host at ${BASTION_HOST}"
+                    scp -i $SSH_KEY_PATH -o StrictHostKeyChecking=no $SSH_KEY_PATH ubuntu@${BASTION_HOST}:/home/ubuntu/.ssh/sonarqube-key.pem
+                    
+                    # Fix permissions on bastion host
+                    ssh -i $SSH_KEY_PATH -o StrictHostKeyChecking=no ubuntu@${BASTION_HOST} "chmod 400 /home/ubuntu/.ssh/sonarqube-key.pem"
+                    
+                    echo "SUCCESS: SSH key copied to bastion host"
+                '''
+            }
+        }
+
         stage('Git Checkout - Ansible Repo') {
             steps {
                 checkout([$class: 'GitSCM',
@@ -154,6 +197,8 @@ pipeline {
                         secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
                     ]]) {
                         sh '''
+                            set -e  # Exit immediately if a command exits with a non-zero status
+                            
                             . $VENV_PATH/bin/activate
                             
                             # Explicitly export AWS credentials for Ansible dynamic inventory plugin
@@ -196,10 +241,16 @@ pipeline {
                             ansible-inventory -i aws_ec2.yml --graph
                             ansible-inventory -i aws_ec2.yml --list
                             
-                            # Ping hosts using ansible
+                            # Ping hosts using ansible - this MUST succeed or pipeline fails
                             echo ""
                             echo "=== Testing SSH Connectivity ==="
-                            ansible -i aws_ec2.yml _sonarqube -m ping -u ubuntu --private-key="$SSH_KEY" 
+                            echo "If ping fails, pipeline will stop immediately"
+                            if ! ansible -i aws_ec2.yml _sonarqube -m ping -u ubuntu --private-key="$SSH_KEY" --timeout=60; then
+                                echo "ERROR: SSH connectivity test FAILED"
+                                echo "Pipeline will stop here. Infrastructure may be destroyed or instances not ready."
+                                exit 1
+                            fi
+                            echo "SSH connectivity test PASSED - proceeding to next stage"
                         '''
                     }
                 }

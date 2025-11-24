@@ -15,3 +15,9 @@ output "bastion_public_ip" {
   description = "Public IP of bastion host"
   value       = aws_instance.public_ec2.public_ip
 }
+
+# Output: Bastion Host Public DNS
+output "bastion_public_dns" {
+  description = "Public DNS name of bastion host"
+  value       = aws_instance.public_ec2.public_dns
+}
