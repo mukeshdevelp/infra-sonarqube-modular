@@ -23,5 +23,5 @@ desired_number                  = 0
 max_number                      = 0
 min_number                      = 0
 alb_listener                    = []
-existing_vpc_id                 = "vpc-00f02dc789ed26995"
+existing_vpc_id                 = "vpc-0b87c4f710a5bf9fe"
 new_vpc_id                      = ""
