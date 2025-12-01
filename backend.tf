@@ -9,7 +9,7 @@ terraform {
   }
 
   backend "s3" {
-    bucket = "sonarqube-terraform-state-12"
+    bucket = "sonarqube-terraform-state-123"
 
     key     = "terraform.tfstate"
     region  = "eu-central-1"
