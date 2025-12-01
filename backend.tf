@@ -12,7 +12,7 @@ terraform {
     bucket = "sonarqube-terraform-state-123"
 
     key     = "terraform.tfstate"
-    region  = "eu-central-1"
+    region  = "ca-central-1"
     encrypt = true
 
 
